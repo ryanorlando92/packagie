@@ -1,8 +1,9 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use calamine::{Reader, Xlsx, open_workbook, DataType};
+use calamine::{Reader, Xlsx, open_workbook, Data}; // 1. Changed DataType to Data to avoid trait confusion
 use serde::Serialize;
+use std::time::Duration; // 2. Added explicit Duration import
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 use tokio::time::sleep;
 
@@ -13,7 +14,6 @@ struct ProgressStatus {
     message: String,
 }
 
-// Emits progress to the TypeScript frontend
 fn emit_progress(app: &AppHandle, current: usize, total: usize, message: &str) {
     let _ = app.emit("import-progress", ProgressStatus {
         current,
@@ -22,11 +22,11 @@ fn emit_progress(app: &AppHandle, current: usize, total: usize, message: &str) {
     });
 }
 
+// 3. Removed 'pub' to resolve the __cmd__ duplication error in a single-file main.rs
 #[tauri::command]
-pub async fn start_import(app: AppHandle, file_path: String) -> Result<(), String> {
+async fn start_import(app: AppHandle, file_path: String) -> Result<(), String> {
     emit_progress(&app, 0, 0, "Initializing...");
 
-    // 1. Ensure the Dutchie Automation Window exists
     let dutchie_window = app.get_webview_window("dutchie").unwrap_or_else(|| {
         WebviewWindowBuilder::new(
             &app,
@@ -39,12 +39,10 @@ pub async fn start_import(app: AppHandle, file_path: String) -> Result<(), Strin
         .unwrap()
     });
 
-    // Bring it to focus so the user can ensure they are logged in
     dutchie_window.set_focus().unwrap();
 
     emit_progress(&app, 0, 0, "Reading Excel File...");
 
-    // 2. Read Excel File using Calamine (No Excel COM required)
     let mut excel: Xlsx<_> = open_workbook(&file_path).map_err(|e| format!("Excel Error: {}", e))?;
     let sheet_names = excel.sheet_names().to_owned();
     let sheet = sheet_names.first().ok_or("No sheets found in workbook")?;
@@ -53,29 +51,26 @@ pub async fn start_import(app: AppHandle, file_path: String) -> Result<(), Strin
                 .worksheet_range(sheet)
                 .map_err(|e| format!("Could not read sheet '{}': {}", sheet, e))?;
     
-    let total_rows = range.get_size().0.saturating_sub(1); // Subtract header row
+    let total_rows = range.get_size().0.saturating_sub(1);
     if total_rows == 0 {
         return Err("No data found to process.".to_string());
     }
 
-    // 3. Process Rows (Skipping Header)
     for (i, row) in range.rows().skip(1).enumerate() {
         let current_row = i + 1;
         
-        // AHK Column Mapping (0-indexed in Rust): metrc(0), qty(3), ndc(4), lot(5), expDate(6), packDate(7)
-        let metrc = row.get(0).unwrap_or(&DataType::Empty).to_string();
-        if metrc.is_empty() { break; } // Stop at first empty row
+        // 4. Used .map().unwrap_or_default() to safely extract strings and avoid trait errors
+        let metrc = row.get(0).map(|d| d.to_string()).unwrap_or_default();
+        if metrc.is_empty() { break; } 
 
-        let qty = row.get(3).unwrap_or(&DataType::Empty).to_string();
-        let ndc = row.get(4).unwrap_or(&DataType::Empty).to_string();
-        let lot = row.get(5).unwrap_or(&DataType::Empty).to_string();
-        let exp_date = row.get(6).unwrap_or(&DataType::Empty).to_string();
-        let pack_date = row.get(7).unwrap_or(&DataType::Empty).to_string();
+        let qty = row.get(3).map(|d| d.to_string()).unwrap_or_default();
+        let ndc = row.get(4).map(|d| d.to_string()).unwrap_or_default();
+        let lot = row.get(5).map(|d| d.to_string()).unwrap_or_default();
+        let exp_date = row.get(6).map(|d| d.to_string()).unwrap_or_default();
+        let pack_date = row.get(7).map(|d| d.to_string()).unwrap_or_default();
 
         emit_progress(&app, current_row, total_rows, &format!("Processing Row {} of {}...", current_row, total_rows));
 
-        // 4. Build and Execute JS Payload
-        // Note: We escape `{` and `}` as `{{` and `}}` in Rust's format! macro.
         let js_payload = format!(r#"
             (async function() {{
                 const delay = ms => new Promise(r => setTimeout(r, ms));
@@ -87,17 +82,15 @@ pub async fn start_import(app: AppHandle, file_path: String) -> Result<(), Strin
                     nativeInputValueSetter.call(el, value);
                     el.dispatchEvent(new Event("input", {{ bubbles: true }}));
                     el.dispatchEvent(new Event("change", {{ bubbles: true }}));
-                    el.dispatchEvent(new Event("blur", {{ bubbles: true }})); // Added blur to trigger React state
+                    el.dispatchEvent(new Event("blur", {{ bubbles: true }}));
                     await delay(150);
                 }};
 
-                // Open modal if closed
                 if (!document.querySelector("div[data-testid=receive-inventory-details_sr_product]")) {{
                     document.querySelector("button[data-testid=receive-inventory_button_add]")?.click();
                     await delay(300);
                 }}
 
-                // Search Product
                 const prod = document.querySelector("input[data-testid=receive-inventory-details_sr_product]");
                 if (prod) {{
                     prod.focus(); prod.click();
@@ -114,19 +107,15 @@ pub async fn start_import(app: AppHandle, file_path: String) -> Result<(), Strin
                 }}
                 await delay(300);
 
-                // Set Standard Inputs
                 await setReactValue("input[data-testid=receive-inventory-details_sr_quantity]", "{qty}");
                 await setReactValue("input-input_Package ID", "{ndc}");
                 await setReactValue("input[data-testid=receive-inventory-details_sr_external-package-id]", "{metrc}");
                 await setReactValue("input-input_Lot name/batch ID", "{lot}");
-
-                // Date Inputs (Replacing CDP Coord Clicks with React setters)
                 await setReactValue("input-input_Expiration date", "{exp_date}");
                 await setReactValue("input-input_Packaging date", "{pack_date}");
 
                 await delay(300);
 
-                // Save
                 const saveBtn = document.querySelector("button[data-testid=receive-inventory-details_button_save]");
                 if (saveBtn && !saveBtn.disabled) {{
                     saveBtn.click();
@@ -134,10 +123,8 @@ pub async fn start_import(app: AppHandle, file_path: String) -> Result<(), Strin
             }})();
         "#);
 
-        // Evaluate JS in the Dutchie window
         dutchie_window.eval(&js_payload).map_err(|e| e.to_string())?;
         
-        // Wait for the JS to finish and the UI to settle (~2.5 seconds total per row)
         sleep(Duration::from_millis(2500)).await; 
     }
 

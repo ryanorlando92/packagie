@@ -1,0 +1,31 @@
+:root {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: #f9f9f9;
+  color: #333;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+}
+
+progress {
+  appearance: none;
+  border: none;
+  border-radius: 10px;
+  background-color: #eee;
+}
+
+progress::-webkit-progress-bar {
+  background-color: #eee;
+  border-radius: 10px;
+}
+
+progress::-webkit-progress-value {
+  background-color: #0078d4;
+  border-radius: 10px;
+  transition: width 0.3s ease;
+}
