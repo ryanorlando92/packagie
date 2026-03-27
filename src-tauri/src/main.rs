@@ -1,7 +1,7 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use calamine::{open_workbook, DataType, Reader, Xlsx};
+use calamine::{Reader, Xlsx, open_workbook, DataType};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 use tokio::time::sleep;
@@ -23,7 +23,7 @@ fn emit_progress(app: &AppHandle, current: usize, total: usize, message: &str) {
 }
 
 #[tauri::command]
-async fn start_import(app: AppHandle, file_path: String) -> Result<(), String> {
+pub async fn start_import(app: AppHandle, file_path: String) -> Result<(), String> {
     emit_progress(&app, 0, 0, "Initializing...");
 
     // 1. Ensure the Dutchie Automation Window exists
@@ -49,7 +49,9 @@ async fn start_import(app: AppHandle, file_path: String) -> Result<(), String> {
     let sheet_names = excel.sheet_names().to_owned();
     let sheet = sheet_names.first().ok_or("No sheets found in workbook")?;
     
-    let range = excel.worksheet_range(sheet).ok_or("Empty sheet")?.map_err(|e| e.to_string())?;
+    let range = excel
+                .worksheet_range(sheet)
+                .map_err(|e| format!("Could not read sheet '{}': {}", sheet, e))?;
     
     let total_rows = range.get_size().0.saturating_sub(1); // Subtract header row
     if total_rows == 0 {
