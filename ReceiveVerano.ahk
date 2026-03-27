@@ -219,7 +219,7 @@ StartImport(*) {
         UpdateGUI() {
             elapsedSec := Round((A_TickCount - startTime) / 1000)
             remainingRows := totalRows - currentRow + 1
-            expectedRowTime := 6000 ; 6000 ms (6 seconds)
+            expectedRowTime := 6500 ; 6000 ms (6 seconds)
 
             etaSec := Round(remainingRows * expectedRowTime / 1000)
             TimeText.Value := "Elapsed: " formatSecs(elapsedSec) " | ETA: " formatSecs(etaSec)
@@ -290,28 +290,28 @@ InjectRowData(metrc, qty, ndc, lot, expDate, packDate) {
                 ns.call(el, val);
                 el.dispatchEvent(new Event("input", {bubbles: true}));
                 el.dispatchEvent(new Event("change", {bubbles: true}));
-                await delay(100);
+                await delay(150);
             };
 
             if (!document.querySelector("div[data-testid=receive-inventory-details_sr_product]")) {
                 document.querySelector("button[data-testid=receive-inventory_button_add]")?.click();
-                await delay(100);
+                await delay(150);
             }
 
             const prod = document.querySelector("input[data-testid=receive-inventory-details_sr_product]");
             if (prod) {
-                prod.focus(); prod.click(); await delay(100);
+                prod.focus(); prod.click(); await delay(150);
                 const search = document.querySelector("input[data-testid=receive-package-modal-products-dropdown-search-input]");
                 if (search) {
                     const ns = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
                     ns.call(search, "%%NDC%%");
                     search.dispatchEvent(new Event("input", {bubbles: true}));
-                    await delay(100);
+                    await delay(150);
                     const opt = document.querySelector("li[data-option-index='0']");
                     if (opt) opt.click();
                 }
             }
-            await delay(100);
+            await delay(150);
 
             await sV("input[data-testid=receive-inventory-details_sr_quantity]", "%%QTY%%");
             await sV("input-input_Package ID", "%%NDC%%");
@@ -324,7 +324,7 @@ InjectRowData(metrc, qty, ndc, lot, expDate, packDate) {
     rowJs := StrReplace(rowJs, "%%METRC%%", metrc)
     
     backofficePage.Evaluate(rowJs)
-    Sleep(1500) ; Wait for JS (500ms sleep inside rowjs) min: 1300
+    Sleep(1750) ; Wait for JS (750ms sleep inside rowjs) min: 1300
 
     HandleDateInput("input-input_Expiration date", expDate)
     HandleDateInput("input-input_Packaging date", packDate)
@@ -341,7 +341,7 @@ InjectRowData(metrc, qty, ndc, lot, expDate, packDate) {
                 el.dispatchEvent(new Event("input", {bubbles: true}));
                 el.dispatchEvent(new Event("change", {bubbles: true}));
             }
-            await delay(100);
+            await delay(150);
             
             const btn = document.querySelector("button[data-testid=receive-inventory-details_button_save]");
             if (btn && !btn.disabled) {
@@ -351,7 +351,7 @@ InjectRowData(metrc, qty, ndc, lot, expDate, packDate) {
     )'
     rowJs2 := StrReplace(jsPart2, "%%LOT%%", lot)
     backofficePage.Evaluate(rowJs2)
-    Sleep(250) ; Wait for JS (100ms sleep inside rowjs2)
+    Sleep(500) ; Wait for JS (150ms sleep inside rowjs2)
 }
 
 HandleDateInput(id, dateValue) {
@@ -368,38 +368,38 @@ HandleDateInput(id, dateValue) {
     targetY := Float(c[2]) + (Float(c[4]) / 2)
     
     CDPClickCoords(backofficePage, targetX, targetY)
-    Sleep(300) ; min:300
+    Sleep(400) ; min:300
     
     ; Hardware Clear (Ctrl+A then Backspace)
     backofficePage.Call("Input.dispatchKeyEvent", Map("type", "rawKeyDown", "windowsVirtualKeyCode", 65, "modifiers", 2))
     backofficePage.Call("Input.dispatchKeyEvent", Map("type", "keyUp", "windowsVirtualKeyCode", 65, "modifiers", 2))
     backofficePage.Call("Input.dispatchKeyEvent", Map("type", "rawKeyDown", "windowsVirtualKeyCode", 8))
     backofficePage.Call("Input.dispatchKeyEvent", Map("type", "keyUp", "windowsVirtualKeyCode", 8))
-    Sleep(100)
+    Sleep(150)
 
     CDPType(backofficePage, dateValue)
 
     backofficePage.Call("Input.dispatchKeyEvent", Map("type", "rawKeyDown", "windowsVirtualKeyCode", 13))
     backofficePage.Call("Input.dispatchKeyEvent", Map("type", "keyUp", "windowsVirtualKeyCode", 13))
-    Sleep(100)
+    Sleep(150)
 
     titleRes := backofficePage.Evaluate("(() => { let e = document.getElementById('input-label_" . id . "') || document.querySelector('h2'); if(!e) return 'null'; let r = e.getBoundingClientRect(); return r.left + ',' + r.top; })()")
     if (titleRes.Has("value") && titleRes["value"] != "null") {
         tc := StrSplit(titleRes["value"], ",")
         CDPClickCoords(backofficePage, Float(tc[1])+5, Float(tc[2])+5)
     }
-    Sleep(300) ; min:250
+    Sleep(500) ; min:250
 }
 
 CDPType(page, text) {
     Loop Parse, text {
         page.Call("Input.dispatchKeyEvent", Map("type", "char", "text", A_LoopField))
-        Sleep(10)
+        Sleep(15)
     }
 }
 
 CDPClickCoords(page, x, y) {
     page.Call("Input.dispatchMouseEvent", Map("type", "mousePressed", "x", x, "y", y, "button", "left", "clickCount", 1))
-    Sleep(50)
+    Sleep(75)
     page.Call("Input.dispatchMouseEvent", Map("type", "mouseReleased", "x", x, "y", y, "button", "left", "clickCount", 1))
 }
