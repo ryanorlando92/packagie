@@ -1,9 +1,8 @@
-// Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use calamine::{Reader, Xlsx, open_workbook, Data}; // 1. Changed DataType to Data to avoid trait confusion
+use calamine::{Reader, Xlsx, open_workbook, Data};
 use serde::Serialize;
-use std::time::Duration; // 2. Added explicit Duration import
+use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 use tokio::time::sleep;
 
@@ -22,44 +21,26 @@ fn emit_progress(app: &AppHandle, current: usize, total: usize, message: &str) {
     });
 }
 
-// 3. Removed 'pub' to resolve the __cmd__ duplication error in a single-file main.rs
 #[tauri::command]
 async fn start_import(app: AppHandle, file_path: String) -> Result<(), String> {
-    emit_progress(&app, 0, 0, "Initializing...");
-
-    let dutchie_window = app.get_webview_window("dutchie").unwrap_or_else(|| {
-        WebviewWindowBuilder::new(
-            &app,
-            "dutchie",
-            WebviewUrl::External("https://verano.backoffice.dutchie.com/products/inventory/receive-inventory".parse().unwrap()),
-        )
-        .title("Dutchie Automation View")
-        .inner_size(1024.0, 768.0)
-        .build()
-        .unwrap()
-    });
+    // Find the window that was created at startup
+    let dutchie_window = app.get_webview_window("dutchie")
+        .ok_or("Dutchie window not found. Please restart the app.")?;
 
     dutchie_window.set_focus().unwrap();
-
     emit_progress(&app, 0, 0, "Reading Excel File...");
 
     let mut excel: Xlsx<_> = open_workbook(&file_path).map_err(|e| format!("Excel Error: {}", e))?;
     let sheet_names = excel.sheet_names().to_owned();
     let sheet = sheet_names.first().ok_or("No sheets found in workbook")?;
-    
-    let range = excel
-                .worksheet_range(sheet)
-                .map_err(|e| format!("Could not read sheet '{}': {}", sheet, e))?;
+    let range = excel.worksheet_range(sheet).map_err(|e| e.to_string())?;
     
     let total_rows = range.get_size().0.saturating_sub(1);
-    if total_rows == 0 {
-        return Err("No data found to process.".to_string());
-    }
+    if total_rows == 0 { return Err("No data found to process.".to_string()); }
 
     for (i, row) in range.rows().skip(1).enumerate() {
         let current_row = i + 1;
         
-        // 4. Used .map().unwrap_or_default() to safely extract strings and avoid trait errors
         let metrc = row.get(0).map(|d| d.to_string()).unwrap_or_default();
         if metrc.is_empty() { break; } 
 
@@ -71,42 +52,49 @@ async fn start_import(app: AppHandle, file_path: String) -> Result<(), String> {
 
         emit_progress(&app, current_row, total_rows, &format!("Processing Row {} of {}...", current_row, total_rows));
 
+        // IMPROVED JS: Uses a helper that tries getElementById first to handle spaces safely
         let js_payload = format!(r#"
             (async function() {{
                 const delay = ms => new Promise(r => setTimeout(r, ms));
-                const setReactValue = async (selector, value) => {{
-                    const el = document.querySelector(selector) || document.getElementById(selector);
+                
+                const setReactValue = async (idOrSelector, value) => {{
+                    // Try ID first (handles spaces), then querySelector
+                    const el = document.getElementById(idOrSelector) || document.querySelector(idOrSelector);
                     if (!el) return;
+                    
                     el.focus();
-                    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
-                    nativeInputValueSetter.call(el, value);
+                    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+                    setter.call(el, value);
                     el.dispatchEvent(new Event("input", {{ bubbles: true }}));
                     el.dispatchEvent(new Event("change", {{ bubbles: true }}));
                     el.dispatchEvent(new Event("blur", {{ bubbles: true }}));
-                    await delay(150);
+                    await delay(100);
                 }};
 
+                // Open modal if closed
                 if (!document.querySelector("div[data-testid=receive-inventory-details_sr_product]")) {{
                     document.querySelector("button[data-testid=receive-inventory_button_add]")?.click();
-                    await delay(300);
+                    await delay(400);
                 }}
 
+                // Search Product
                 const prod = document.querySelector("input[data-testid=receive-inventory-details_sr_product]");
                 if (prod) {{
                     prod.focus(); prod.click();
-                    await delay(150);
+                    await delay(200);
                     const search = document.querySelector("input[data-testid=receive-package-modal-products-dropdown-search-input]");
                     if (search) {{
                         const ns = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
                         ns.call(search, "{ndc}");
                         search.dispatchEvent(new Event("input", {{bubbles: true}}));
-                        await delay(300);
+                        await delay(500);
                         const opt = document.querySelector("li[data-option-index='0']");
                         if (opt) opt.click();
                     }}
                 }}
-                await delay(300);
+                await delay(400);
 
+                // Field Injections (Mixing data-testids and raw IDs)
                 await setReactValue("input[data-testid=receive-inventory-details_sr_quantity]", "{qty}");
                 await setReactValue("input-input_Package ID", "{ndc}");
                 await setReactValue("input[data-testid=receive-inventory-details_sr_external-package-id]", "{metrc}");
@@ -124,7 +112,6 @@ async fn start_import(app: AppHandle, file_path: String) -> Result<(), String> {
         "#);
 
         dutchie_window.eval(&js_payload).map_err(|e| e.to_string())?;
-        
         sleep(Duration::from_millis(2500)).await; 
     }
 
@@ -135,6 +122,18 @@ async fn start_import(app: AppHandle, file_path: String) -> Result<(), String> {
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        // NEW: Setup hook to open the automation window on startup
+        .setup(|app| {
+            WebviewWindowBuilder::new(
+                app,
+                "dutchie",
+                WebviewUrl::External("https://verano.backoffice.dutchie.com/products/inventory/receive-inventory".parse().unwrap()),
+            )
+            .title("Dutchie Automation View")
+            .inner_size(1024.0, 768.0)
+            .build()?;
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![start_import])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -14,8 +14,8 @@
     "windows": [
       {
         "title": "Packagie Tauri Dev",
-        "width": 800,
-        "height": 600
+        "width": 500,
+        "height": 300
       }
     ],
     "security": {
