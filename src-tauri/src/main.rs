@@ -52,8 +52,7 @@ async fn start_import(app: AppHandle, file_path: String) -> Result<(), String> {
     dutchie_window.set_focus().map_err(|e| e.to_string())?;
     emit_progress(&app, 0, 0, "Reading Excel File...");
 
-    let mut excel: Xlsx<_> =
-        open_workbook(&file_path).map_err(|e| format!("Excel Error: {}", e))?;
+    let mut excel: Xlsx<_> = open_workbook(&file_path).map_err(|e| format!("Excel Error: {}", e))?;
     let sheet = excel
         .sheet_names()
         .first()
@@ -88,7 +87,8 @@ async fn start_import(app: AppHandle, file_path: String) -> Result<(), String> {
             (async function() {{
                 const delay = ms => new Promise(r => setTimeout(r, ms));
                 
-                const injectField = async (identifier, val) => {{
+                // NEW: Added isDate parameter for aggressive popper closing
+                const injectField = async (identifier, val, isDate = false) => {{
                     if (!val || val === "") return;
                     let el = document.getElementById(identifier);
                     if (!el) {{ try {{ el = document.querySelector(identifier); }} catch(e) {{}} }}
@@ -106,6 +106,20 @@ async fn start_import(app: AppHandle, file_path: String) -> Result<(), String> {
                     el.dispatchEvent(new Event("input", {{ bubbles: true }}));
                     el.dispatchEvent(new Event("change", {{ bubbles: true }}));
                     el.dispatchEvent(new KeyboardEvent("keydown", {{ key: "Enter", keyCode: 13, bubbles: true }}));
+                    
+                    // Steal focus away from the date picker so it saves
+                    if (isDate) {{
+                        await delay(100);
+                        el.dispatchEvent(new KeyboardEvent("keydown", {{ key: "Escape", keyCode: 27, bubbles: true }}));
+                        
+                        const header = document.querySelector("h2.MuiDialogTitle-root") || document.querySelector("h2");
+                        if (header) {{
+                            header.dispatchEvent(new MouseEvent("mousedown", {{ bubbles: true }}));
+                            header.dispatchEvent(new MouseEvent("mouseup", {{ bubbles: true }}));
+                            header.click();
+                        }}
+                    }}
+
                     el.blur();
                     await delay(150);
                 }};
@@ -170,9 +184,9 @@ async fn start_import(app: AppHandle, file_path: String) -> Result<(), String> {
                 await delay(800); 
                 await injectField("input-input_Lot name/batch ID", "{lot}");
                 
-                // Inject the Dates (that we know work!)
-                await injectField("input-input_Expiration date", "{exp_date}");
-                await injectField("input-input_Packaging date", "{pack_date}");
+                // NEW: Trigger the isDate boolean to aggressively close the calendar
+                await injectField("input-input_Expiration date", "{exp_date}", true);
+                await injectField("input-input_Packaging date", "{pack_date}", true);
 
                 await delay(500);
 
