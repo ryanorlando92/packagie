@@ -227,7 +227,7 @@ fn main() {
                         .unwrap(),
                 ),
             )
-            .title("Dutchie Automation")
+            .title("Packagie - Receive Inventory")
             .inner_size(1100.0, 850.0)
             .build()?;
             Ok(())
