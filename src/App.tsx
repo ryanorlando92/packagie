@@ -41,66 +41,6 @@ export default function App() {
     }
   };
 
-  async function checkForAppUpdates() {
-    try {
-        console.log("Checking for updates...");
-        
-        // 1. Ask the Rust backend to check the GitHub latest.json endpoint
-        const update = await check();
-
-        // 2. If 'update' is null, we are on the latest version
-        if (!update) {
-            console.log("App is up to date.");
-            return; 
-        }
-
-        // 3. An update was found! Prompt the user
-        const userWantsToUpdate = await confirm(
-            `Packagie ${update.version} is available!\n\nRelease Notes:\n${update.body}\n\nDo you want to download and install it now?`, 
-            {
-                title: 'Update Available',
-                kind: 'info',
-                okLabel: 'Update Now',
-                cancelLabel: 'Remind Me Later'
-            }
-        );
-
-        if (userWantsToUpdate) {
-            // Optional: You could show a loading spinner in your UI here
-            console.log("Downloading and installing update...");
-            
-            // 4. Download the .zip, verify the .sig signature, and extract it
-            await update.downloadAndInstall((event) => {
-                switch (event.event) {
-                    case 'Started':
-                        console.log(`Started downloading ${event.data.contentLength} bytes`);
-                        break;
-                    case 'Progress':
-                        console.log(`Downloaded ${event.data.chunkLength} bytes`);
-                        break;
-                    case 'Finished':
-                        console.log('Download finished');
-                        break;
-                }
-            });
-
-            console.log("Install complete. Relaunching...");
-            
-            // 5. Restart the app to apply the new binary
-            await relaunch();
-        }
-        
-    } catch (error: any) {
-        console.error("Failed to check for updates:", error);
-        await message(`Failed to update Packagie: ${error.message}`, {
-            title: 'Update Error',
-            kind: 'error'
-        });
-    }
-}
-
-checkForAppUpdates();
-
   return (
     <div style={{ padding: '20px', fontFamily: 'Verdana, sans-serif' }}>
       <h2>Dutchie Package Importer</h2>
@@ -128,3 +68,57 @@ checkForAppUpdates();
     </div>
   );
 }
+
+async function checkForAppUpdates() {
+    try {
+        console.log("Checking for updates...");
+        
+        const update = await check();
+
+        if (!update) {
+            console.log("App is up to date.");
+            return; 
+        }
+
+        const userWantsToUpdate = await confirm(
+            `Packagie ${update.version} is available!\n\nRelease Notes:\n${update.body}\n\nDo you want to download and install it now?`, 
+            {
+                title: 'Update Available',
+                kind: 'info',
+                okLabel: 'Update Now',
+                cancelLabel: 'Remind Me Later'
+            }
+        );
+
+        if (userWantsToUpdate) {
+            console.log("Downloading and installing update...");
+            
+            await update.downloadAndInstall((event) => {
+                switch (event.event) {
+                    case 'Started':
+                        console.log(`Started downloading ${event.data.contentLength} bytes`);
+                        break;
+                    case 'Progress':
+                        console.log(`Downloaded ${event.data.chunkLength} bytes`);
+                        break;
+                    case 'Finished':
+                        console.log('Download finished');
+                        break;
+                }
+            });
+
+            console.log("Install complete. Relaunching...");
+            
+            await relaunch();
+        }
+        
+    } catch (error: any) {
+        console.error("Failed to check for updates:", error);
+        await message(`Failed to update Packagie: ${error.message}`, {
+            title: 'Update Error',
+            kind: 'error'
+        });
+    }
+}
+
+checkForAppUpdates();
