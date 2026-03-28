@@ -41,12 +41,10 @@ jobs:
       - name: Extract commit message
         id: get_commit
         run: |
-          {
-            echo 'MESSAGE<<EOF'
-            git log -1 --pretty=format:"%B"
-            echo
-            echo 'EOF'
-          } >> "$GITHUB_OUTPUT"
+          COMMIT_MSG=$(git log -1 --format=%B ${{ github.sha }})
+          echo "MESSAGE<<EOF" >> $GITHUB_OUTPUT
+          echo "$COMMIT_MSG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Build Tauri App and Publish Release
         uses: tauri-apps/tauri-action@v0

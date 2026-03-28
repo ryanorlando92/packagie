@@ -126,7 +126,7 @@ async fn start_import(app: AppHandle, file_path: String) -> Result<(), String> {
 
                 if (!document.querySelector("div[data-testid=receive-inventory-details_sr_product]")) {{
                     document.querySelector("button[data-testid=receive-inventory_button_add]")?.click();
-                    await delay(600); 
+                    await delay(200); 
                 }}
 
                 // ==========================================
@@ -135,7 +135,7 @@ async fn start_import(app: AppHandle, file_path: String) -> Result<(), String> {
                 const prod = document.querySelector("input[data-testid=receive-inventory-details_sr_product]");
                 if (prod) {{
                     prod.focus(); prod.click();
-                    await delay(300);
+                    await delay(200);
                     
                     const search = document.querySelector("input[data-testid=receive-package-modal-products-dropdown-search-input]");
                     if (search) {{
@@ -145,7 +145,7 @@ async fn start_import(app: AppHandle, file_path: String) -> Result<(), String> {
                         search.dispatchEvent(new Event("input", {{bubbles: true}}));
                         
                         // Wait for Dutchie API
-                        await delay(1500); 
+                        await delay(200); 
                         
                         // Find the dropdown option
                         const opt = document.querySelector("li[data-option-index='0']");
@@ -153,50 +153,27 @@ async fn start_import(app: AppHandle, file_path: String) -> Result<(), String> {
                             // Force MUI's required mousedown event
                             opt.dispatchEvent(new MouseEvent('mousedown', {{ bubbles: true, cancelable: true }}));
                             await delay(50);
-                            
-                            // 1. Try React Fiber Bypass
-                            let clicked = false;
-                            const reactKey = Object.keys(opt).find(k => k.startsWith("__reactFiber$"));
-                            if (reactKey && opt[reactKey].return && opt[reactKey].return.memoizedProps) {{
-                                try {{
-                                    if (typeof opt[reactKey].return.memoizedProps.onClick === 'function') {{
-                                        opt[reactKey].return.memoizedProps.onClick({{ preventDefault: () => {{}}, stopPropagation: () => {{}} }});
-                                        clicked = true;
-                                    }}
-                                }} catch(e) {{}}
-                            }}
-                            
-                            // 2. Fallback to standard synthetic click
-                            if (!clicked) {{
-                                opt.dispatchEvent(new MouseEvent('mouseup', {{ bubbles: true, cancelable: true }}));
-                                opt.click();
-                            }}
+                            opt.dispatchEvent(new MouseEvent('mouseup', {{ bubbles: true, cancelable: true }}));
+                            opt.click();
                         }}
                     }}
                 }}
-                await delay(800);
+                await delay(200);
 
-                // Inject Standard Fields
                 await injectField("input[data-testid=receive-inventory-details_sr_quantity]", "{qty}");
                 await injectField("input-input_Package ID", "{ndc}");
                 await injectField("input-input_External package ID", "{metrc}");
-                
-                await delay(800); 
                 await injectField("input-input_Lot name/batch ID", "{lot}");
-                
-                // NEW: Trigger the isDate boolean to aggressively close the calendar
                 await injectField("input-input_Expiration date", "{exp_date}", true);
+                await delay(50);
                 await injectField("input-input_Packaging date", "{pack_date}", true);
 
-                await delay(500);
+                await delay(200);
 
                 // Save
-                document.body.click(); // Blur active fields
-                await delay(200);
                 const saveBtn = document.querySelector("button[data-testid=receive-inventory-details_button_save]");
                 if (saveBtn && !saveBtn.disabled) {{
                     saveBtn.click();
-                    await delay(1000);
                 }}
             }})();
         "#
@@ -205,7 +182,21 @@ async fn start_import(app: AppHandle, file_path: String) -> Result<(), String> {
         dutchie_window
             .eval(&js_payload)
             .map_err(|e| e.to_string())?;
-        sleep(Duration::from_millis(10000)).await;
+        sleep(Duration::from_millis(7000)).await;
+
+    /*      must implement get orderTitle, save, navigate to page in progress, time lost may not be worth doing q20-q30
+        if current_row % 15 == 0 {
+            emit_progress(
+                &app, 
+                current_row, 
+                total_rows, 
+                "Clearing browser memory to maintain speed..."
+            );
+            
+            let _ = dutchie_window.eval("window.location.reload();");
+            
+            sleep(Duration::from_millis(6000)).await; 
+        } */
     }
 
     emit_progress(&app, total_rows, total_rows, "Import Complete!");
