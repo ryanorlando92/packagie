@@ -25,4 +25,5 @@ serde_json = "1"
 tauri-plugin-dialog = "2"
 calamine = "0.34.0"
 tokio = { version = "1", features = ["time", "rt"] }
+chrono = "0.4"
 

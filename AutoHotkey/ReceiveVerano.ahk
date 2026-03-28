@@ -324,7 +324,7 @@ InjectRowData(metrc, qty, ndc, lot, expDate, packDate) {
     rowJs := StrReplace(rowJs, "%%METRC%%", metrc)
     
     backofficePage.Evaluate(rowJs)
-    Sleep(1750) ; Wait for JS (750ms sleep inside rowjs) min: 1300
+    Sleep(2000) ; Wait for JS (750ms sleep inside rowjs) min: 1300
 
     HandleDateInput("input-input_Expiration date", expDate)
     HandleDateInput("input-input_Packaging date", packDate)
@@ -350,6 +350,7 @@ InjectRowData(metrc, qty, ndc, lot, expDate, packDate) {
         })();
     )'
     rowJs2 := StrReplace(jsPart2, "%%LOT%%", lot)
+    Sleep(100)
     backofficePage.Evaluate(rowJs2)
     Sleep(500) ; Wait for JS (150ms sleep inside rowjs2)
 }
@@ -379,7 +380,7 @@ HandleDateInput(id, dateValue) {
 
     CDPType(backofficePage, dateValue)
 
-    backofficePage.Call("Input.dispatchKeyEvent", Map("type", "rawKeyDown", "windowsVirtualKeyCode", 13))
+    backofficePage.Call("Input.dispatchKeyEvent", Map("type", "rawKeyDown", "windowsVirtualKeyCode", 13)) ; enter
     backofficePage.Call("Input.dispatchKeyEvent", Map("type", "keyUp", "windowsVirtualKeyCode", 13))
     Sleep(150)
 
