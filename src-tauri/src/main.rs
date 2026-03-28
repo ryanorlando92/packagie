@@ -22,6 +22,7 @@ fn emit_progress(app: &AppHandle, current: usize, total: usize, message: &str) {
     });
 }
 
+// The Date Formatter that worked perfectly
 fn format_excel_date(data: &Data) -> String {
     let raw = data.to_string();
     if raw.trim().is_empty() { return String::new(); }
@@ -60,10 +61,6 @@ async fn start_import(app: AppHandle, file_path: String) -> Result<(), String> {
         let exp_date = format_excel_date(row.get(6).unwrap_or(&Data::Empty));
         let pack_date = format_excel_date(row.get(7).unwrap_or(&Data::Empty));
 
-        println!("--- ROW {} ---", current_row);
-        println!("METRC: '{}', QTY: '{}', NDC: '{}', LOT: '{}', EXP: '{}', PACK: '{}'", 
-                 metrc, qty, ndc, lot, exp_date, pack_date);
-
         emit_progress(&app, current_row, total_rows, &format!("Processing Row {}...", current_row));
 
         let js_payload = format!(r#"
@@ -72,8 +69,8 @@ async fn start_import(app: AppHandle, file_path: String) -> Result<(), String> {
                 
                 const injectField = async (identifier, val) => {{
                     if (!val || val === "") return;
-                    
-                    let el = document.getElementById(identifier) || document.querySelector(identifier);
+                    let el = document.getElementById(identifier);
+                    if (!el) {{ try {{ el = document.querySelector(identifier); }} catch(e) {{}} }}
                     if (!el) return;
 
                     const wrapper = el.closest('.MuiInputBase-root');
@@ -82,13 +79,9 @@ async fn start_import(app: AppHandle, file_path: String) -> Result<(), String> {
                         if (clearBtn) {{ clearBtn.click(); await delay(100); }}
                     }}
 
-                    el.focus();
-                    el.click();
-                    await delay(50);
-
+                    el.focus(); el.click(); await delay(50);
                     const ns = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
                     ns.call(el, val);
-                    
                     el.dispatchEvent(new Event("input", {{ bubbles: true }}));
                     el.dispatchEvent(new Event("change", {{ bubbles: true }}));
                     el.dispatchEvent(new KeyboardEvent("keydown", {{ key: "Enter", keyCode: 13, bubbles: true }}));
@@ -98,50 +91,57 @@ async fn start_import(app: AppHandle, file_path: String) -> Result<(), String> {
 
                 if (!document.querySelector("div[data-testid=receive-inventory-details_sr_product]")) {{
                     document.querySelector("button[data-testid=receive-inventory_button_add]")?.click();
-                    await delay(500); 
+                    await delay(600); 
                 }}
 
-                // 2. PRODUCT SEARCH: Beating the MUI "Trusted Event" Filter
+                // ==========================================
+                // THE REACT FIBER HACK FOR CATALOG SELECTION
+                // ==========================================
                 const prod = document.querySelector("input[data-testid=receive-inventory-details_sr_product]");
                 if (prod) {{
-                    prod.focus(); 
-                    prod.click();
+                    prod.focus(); prod.click();
                     await delay(300);
                     
                     const search = document.querySelector("input[data-testid=receive-package-modal-products-dropdown-search-input]");
                     if (search) {{
                         search.focus();
-                        search.click();
-                        await delay(200);
-
-                        // Type character-by-character using execCommand so React sees it as a clipboard/native event
-                        const ndcVal = "{ndc}";
-                        for (let i = 0; i < ndcVal.length; i++) {{
-                            document.execCommand('insertText', false, ndcVal[i]);
-                            search.dispatchEvent(new Event("input", {{bubbles: true}}));
-                            await delay(30);
-                        }}
+                        const ns = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+                        ns.call(search, "{ndc}");
+                        search.dispatchEvent(new Event("input", {{bubbles: true}}));
                         
-                        // Wait for Dutchie API to return search results
+                        // Wait for Dutchie API
                         await delay(1500); 
                         
-                        // MUI Autocomplete specifically listens to 'mousedown' to prevent blur before click
-                        const opt = document.querySelector("li[data-option-index='0']") || document.querySelector(".MuiAutocomplete-option");
+                        // Find the dropdown option
+                        const opt = document.querySelector("li[data-option-index='0']");
                         if (opt) {{
-                            opt.dispatchEvent(new MouseEvent("mousedown", {{bubbles: true, cancelable: true, view: window}}));
-                            opt.dispatchEvent(new MouseEvent("mouseup", {{bubbles: true, cancelable: true, view: window}}));
-                            opt.click();
-                        }} else {{
-                            // Fallback: Send ArrowDown and Enter
-                            search.dispatchEvent(new KeyboardEvent("keydown", {{ key: "ArrowDown", keyCode: 40, bubbles: true }}));
-                            await delay(100);
-                            search.dispatchEvent(new KeyboardEvent("keydown", {{ key: "Enter", keyCode: 13, bubbles: true }}));
+                            // Force MUI's required mousedown event
+                            opt.dispatchEvent(new MouseEvent('mousedown', {{ bubbles: true, cancelable: true }}));
+                            await delay(50);
+                            
+                            // 1. Try React Fiber Bypass
+                            let clicked = false;
+                            const reactKey = Object.keys(opt).find(k => k.startsWith("__reactFiber$"));
+                            if (reactKey && opt[reactKey].return && opt[reactKey].return.memoizedProps) {{
+                                try {{
+                                    if (typeof opt[reactKey].return.memoizedProps.onClick === 'function') {{
+                                        opt[reactKey].return.memoizedProps.onClick({{ preventDefault: () => {{}}, stopPropagation: () => {{}} }});
+                                        clicked = true;
+                                    }}
+                                }} catch(e) {{}}
+                            }}
+                            
+                            // 2. Fallback to standard synthetic click
+                            if (!clicked) {{
+                                opt.dispatchEvent(new MouseEvent('mouseup', {{ bubbles: true, cancelable: true }}));
+                                opt.click();
+                            }}
                         }}
                     }}
                 }}
                 await delay(800);
 
-                // 3. Inject Standard Fields Sequence
+                // Inject Standard Fields
                 await injectField("input[data-testid=receive-inventory-details_sr_quantity]", "{qty}");
                 await injectField("input-input_Package ID", "{ndc}");
                 await injectField("input-input_External package ID", "{metrc}");
@@ -149,20 +149,25 @@ async fn start_import(app: AppHandle, file_path: String) -> Result<(), String> {
                 await delay(800); 
                 await injectField("input-input_Lot name/batch ID", "{lot}");
                 
+                // Inject the Dates (that we know work!)
                 await injectField("input-input_Expiration date", "{exp_date}");
                 await injectField("input-input_Packaging date", "{pack_date}");
 
                 await delay(500);
 
+                // Save
+                document.body.click(); // Blur active fields
+                await delay(200);
                 const saveBtn = document.querySelector("button[data-testid=receive-inventory-details_button_save]");
                 if (saveBtn && !saveBtn.disabled) {{
                     saveBtn.click();
+                    await delay(1000);
                 }}
             }})();
         "#);
 
         dutchie_window.eval(&js_payload).map_err(|e| e.to_string())?;
-        sleep(Duration::from_millis(3000)).await; 
+        sleep(Duration::from_millis(10000)).await; 
     }
 
     emit_progress(&app, total_rows, total_rows, "Import Complete!");
