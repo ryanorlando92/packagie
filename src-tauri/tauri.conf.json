@@ -22,8 +22,19 @@
       "csp": null
     }
   },
+  
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEEwMzUwQkIwMDNENDRGNjIKUldSaVQ5UURzQXMxb0N6YUduV3UzNXl4MEJ2Q2p1dVVQVnNZRjhuazN3eU5JV0pEQ1ZmUlVlbGIK", 
+      "endpoints": [
+        "https://github.com/ryanorlando92/packagie/releases/latest/download/latest.json"
+      ]
+    }
+  },
+
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": "all",
     "icon": [
       "icons/32x32.png",
