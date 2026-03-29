@@ -38,14 +38,6 @@ jobs:
       - name: Install frontend NPM packages
         run: npm install
 
-      - name: Extract commit message
-        id: get_commit
-        run: |
-          COMMIT_MSG=$(git log -1 --format=%B ${{ github.sha }})
-          echo "MESSAGE<<EOF" >> $GITHUB_OUTPUT
-          echo "$COMMIT_MSG" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
       - name: Build Tauri App and Publish Release
         uses: tauri-apps/tauri-action@v0
         env:
@@ -55,6 +47,6 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'Packagie ${{ github.ref_name }}'
-          releaseBody: ${{ steps.get_commit.outputs.MESSAGE }}
+          releaseBody: "https://github.com/ryanorlando92/packagie/releases/latest"
           releaseDraft: false
           prerelease: false
