@@ -15,7 +15,8 @@
       {
       "title": "Packagie 2.0.3",
         "width": 500,
-        "height": 350
+        "height": 450,
+        "alwaysOnTop": true
       }
     ],
     "security": {

@@ -44,6 +44,59 @@ fn format_excel_date(data: &Data) -> String {
 }
 
 #[tauri::command]
+fn get_os_username() -> String {
+    std::env::var("USER")
+        .unwrap_or_else(|_| std::env::var("USERNAME").unwrap_or_else(|_| "unknown".to_string()))
+}
+
+#[tauri::command]
+async fn auto_login(app: tauri::AppHandle, user: String, pass: String) -> Result<(), String> {
+    let dutchie_window = app
+        .get_webview_window("dutchie")
+        .ok_or("Dutchie window not found.")?;
+
+    // Safely serialize the strings to prevent JS injection breaking the syntax
+    let safe_user = serde_json::to_string(&user).unwrap_or_default();
+    let safe_pass = serde_json::to_string(&pass).unwrap_or_default();
+
+    let js_payload = format!(r#"
+        (function() {{
+            const injectedUser = {};
+            const injectedPass = {};
+            let attempts = 0;
+
+            const setNativeValue = (element, value) => {{
+                const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+                valueSetter.call(element, value);
+                element.dispatchEvent(new Event('input', {{ bubbles: true }}));
+            }};
+
+            const attemptLogin = () => {{
+                attempts++;
+                const userField = document.querySelector('input[data-testid="login-page_input_username"], input[placeholder="Username"]');
+                const passField = document.querySelector('input[type="password"]');
+
+                if (userField && passField) {{
+                    setNativeValue(userField, injectedUser);
+                    setNativeValue(passField, injectedPass);
+                    
+                    const loginBtn = document.querySelector('button[type="submit"]');
+                    if (loginBtn) {{
+                        setTimeout(() => loginBtn.click(), 500); 
+                    }}
+                }} else if (attempts < 20) {{
+                    setTimeout(attemptLogin, 500);
+                }}
+            }};
+            attemptLogin();
+        }})();
+    "#, safe_user, safe_pass);
+
+    dutchie_window.eval(&js_payload).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
 async fn start_import(app: AppHandle, file_path: String) -> Result<(), String> {
     let dutchie_window = app
         .get_webview_window("dutchie")
@@ -52,7 +105,8 @@ async fn start_import(app: AppHandle, file_path: String) -> Result<(), String> {
     dutchie_window.set_focus().map_err(|e| e.to_string())?;
     emit_progress(&app, 0, 0, "Reading Excel File...");
 
-    let mut excel: Xlsx<_> = open_workbook(&file_path).map_err(|e| format!("Excel Error: {}", e))?;
+    let mut excel: Xlsx<_> =
+        open_workbook(&file_path).map_err(|e| format!("Excel Error: {}", e))?;
     let sheet = excel
         .sheet_names()
         .first()
@@ -129,9 +183,6 @@ async fn start_import(app: AppHandle, file_path: String) -> Result<(), String> {
                     await delay(200); 
                 }}
 
-                // ==========================================
-                // THE REACT FIBER HACK FOR CATALOG SELECTION
-                // ==========================================
                 const prod = document.querySelector("input[data-testid=receive-inventory-details_sr_product]");
                 if (prod) {{
                     prod.focus(); prod.click();
@@ -182,21 +233,26 @@ async fn start_import(app: AppHandle, file_path: String) -> Result<(), String> {
         dutchie_window
             .eval(&js_payload)
             .map_err(|e| e.to_string())?;
-        sleep(Duration::from_millis(7000)).await;
+        sleep(Duration::from_millis(5500)).await;
 
-    /*      must implement get orderTitle, save, navigate to page in progress, time lost may not be worth doing q20-q30
-        if current_row % 15 == 0 {
-            emit_progress(
-                &app, 
-                current_row, 
-                total_rows, 
-                "Clearing browser memory to maintain speed..."
-            );
-            
-            let _ = dutchie_window.eval("window.location.reload();");
-            
-            sleep(Duration::from_millis(6000)).await; 
-        } */
+        if current_row > 10 {
+            sleep(Duration::from_millis(500)).await;
+        }
+        if current_row > 20 {
+            sleep(Duration::from_millis(500)).await;
+        }
+        if current_row > 27 {
+            sleep(Duration::from_millis(500)).await;
+        }
+        if current_row > 34 {
+            sleep(Duration::from_millis(500)).await;
+        }
+        if current_row > 40 {
+            sleep(Duration::from_millis(1000)).await;
+        }
+        if current_row > 45 {
+            sleep(Duration::from_millis(1000)).await;
+        }
     }
 
     emit_progress(&app, total_rows, total_rows, "Import Complete!");
@@ -205,9 +261,15 @@ async fn start_import(app: AppHandle, file_path: String) -> Result<(), String> {
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
+        .on_window_event(|_window, event| {
+            if let tauri::WindowEvent::Destroyed = event {
+                std::process::exit(0);
+            }
+        })
         .setup(|app| {
             WebviewWindowBuilder::new(
                 app,
@@ -223,7 +285,7 @@ fn main() {
             .build()?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![start_import])
+        .invoke_handler(tauri::generate_handler![start_import, get_os_username, auto_login])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
