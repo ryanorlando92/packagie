@@ -25,6 +25,33 @@ export default function App() {
         }
     }, []);
 
+    const openSettings = async () => {
+        try {
+            const store = await load('settings.json');
+            const osUser = await invoke<string>('get_os_username');
+            
+            const savedUser = await store.get<string>('username');
+            const savedEncryptedPass = await store.get<string>('password');
+
+            if (savedUser) {
+                setUsername(savedUser);
+            }
+          
+            if (savedEncryptedPass) {
+                const decryptedPass = await SecureStore.decrypt(savedEncryptedPass, osUser);
+                if (decryptedPass) {
+                    setPassword(decryptedPass);
+                }
+            }
+            
+            setShowSettings(true);
+
+        } catch (error) {
+            console.error("Failed to load settings into UI:", error);
+            setShowSettings(true); // Open it anyway
+        }
+    };
+
     const saveSettings = async () => {
         const store = await load('settings.json');
         const osUser = await invoke<string>('get_os_username');
@@ -73,8 +100,10 @@ export default function App() {
   return (
     <main className="container">            
       <div style={{ fontFamily: 'Verdana, sans-serif' }}>
-      <h2>Dutchie Package Importer</h2>
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+      <h2
+        style={{ margin: '0px' }}
+      >Dutchie Package Importer</h2>
+      <div style={{ display: 'flex', gap: '10px', margin: '20px' }}>
         <input 
           type="text" 
           value={filePath} 
@@ -91,29 +120,34 @@ export default function App() {
       >
         {isProcessing ? 'IMPORTING...' : 'START IMPORT'}
       </button>
-      <button onClick={() => setShowSettings(!showSettings)} 
+      <button 
         style={{ margin: '20px' }}
-      >
-                ⚙️ Settings
-            </button>
+        onClick={() => showSettings ? setShowSettings(false) : openSettings()}
+        >
+            {showSettings ? '❌ Close Settings' : '⚙️ Settings'}
+        </button>
 
-            {showSettings && (
-                <div className="settings-panel">
-                    <h3>Dutchie Credentials</h3>
-                    <input 
-                        type="text" 
-                        placeholder="Username" 
-                        value={username} 
-                        onChange={(e) => setUsername(e.target.value)} 
-                    />
-                    <input 
-                        type="password" 
-                        placeholder="Password" 
-                        value={password} 
-                        onChange={(e) => setPassword(e.target.value)} 
-                    />
-                    <button onClick={saveSettings}>Save Credentials</button>
-                </div>
+        {showSettings && (
+            <div className="settings-panel">
+                <h3
+                  style={{ margin: '5px' }}
+                >Dutchie Credentials</h3>
+                <input 
+                    type="text" 
+                    placeholder="Username" 
+                    value={username} 
+                    onChange={(e) => setUsername(e.target.value)}
+                    style={{ padding: '5px 10px', width: '70%', margin: '10px' }} 
+                />
+                <input 
+                    type="password" 
+                    placeholder="Password" 
+                    value={password} 
+                    onChange={(e) => setPassword(e.target.value)} 
+                    style={{ padding: '5px 10px', width: '80%', margin: '10px' }} 
+                />
+                <button onClick={saveSettings}>Save Credentials</button>
+            </div>
             )}
       <div style={{ marginTop: '20px' }}>
         <p style={{ textAlign: 'center' }}>{status}</p>
