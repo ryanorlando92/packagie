@@ -1,6 +1,8 @@
 # Packagie (Dutchie Automation)
 
-Packagie is a cross-platform desktop application built with Tauri, Rust, and React. It is designed to automate the tedious process of weekly inventory directly into the Dutchie Backoffice "Receive Inventory" system. 
+Packagie started as a brittle autohotkey script made to try and save some time. I've switched to Tauri for v2 so i can use it on my linux laptop at work. You can still find the original v1 in the autohotkey folder.
+
+Packagie is a cross-platform desktop application built with Tauri, Rust, and React(lol) It is designed to automate the tedious process of weekly inventory directly into the Dutchie Backoffice "Receive Inventory" system. 
 
 Packagie mimics human interaction to safely and accurately inject NDC, quantity, package ID, External package ID (Metrc tag), Lot Number, and expiration / package dates into the Dutchie UI.
 
@@ -19,7 +21,7 @@ Packagie mimics human interaction to safely and accurately inject NDC, quantity,
 
 1. Get the latest version from [https://github.com/ryanorlando92/packagie/releases/latest](https://github.com/ryanorlando92/packagie/releases/latest)
 
-* VERANO COMPUTERS MUST USE 'packagie-x.x.x_x64-setup.exe' THIS WILL INSTALL INTO YOUR APPDATA FOLDER BY DEFAULT AND WILL NOT REQUIRE AN ADMIN PASSWORD
+* VERANO COMPUTERS MUST USE `packagie-x.x.x_x64-setup.exe` THIS WILL INSTALL INTO YOUR APPDATA FOLDER BY DEFAULT AND WILL NOT REQUIRE AN ADMIN PASSWORD
 
 2. Install the package
 
