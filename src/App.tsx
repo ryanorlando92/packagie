@@ -31,7 +31,7 @@ export default function App() {
             const savedUsername = await store.get<string>('username');
 
             if (savedUsername) {
-                const hasPass = await invoke<boolean>('has_saved_password', { username: savedUsername });
+                const hasPass = await invoke<boolean>('has_saved_password');
                 if (hasPass) {
                     console.log("OS Credentials found. Triggering backend injection...");
                     await invoke('auto_login', { username: savedUsername });
@@ -49,7 +49,7 @@ export default function App() {
 
             if (savedUser) {
                 setUsername(savedUser);
-                const hasPass = await invoke<boolean>('has_saved_password', { username: savedUser });
+                const hasPass = await invoke<boolean>('has_saved_password',);
                 if (hasPass) {
                     // Display a dummy string so you know a password is saved
                     setPassword('********'); 
@@ -72,7 +72,7 @@ export default function App() {
             
             // 2. If they typed a new password, send it directly to the OS Keychain
             if (password && password !== '********') {
-                await invoke('save_credentials', { username, password });
+                await invoke('save_credentials', { password });
             }
             
             await message("Your credentials have been securely saved.", {

@@ -45,63 +45,49 @@ fn format_excel_date(data: &Data) -> String {
 }
 
 #[tauri::command]
-fn save_credentials(username: String, password: String) -> Result<(), String> {
-    println!("\n[KEYRING DEBUG] Attempting to save password for: {}", username);
-    
-    // We accept a standard String from React, then immediately lock it in a SecretString
+fn save_credentials(password: String) -> Result<(), String> {
+    println!("\n[KEYRING DEBUG] Saving password to Packagie vault...");
     let secret_pass = SecretString::from(password);
-    let entry = Entry::new("packagie_dutchie_auth", &username).map_err(|e| e.to_string())?;
+    
+    // Use a hardcoded, safe string to bypass OS parsing bugs!
+    let entry = Entry::new("packagie_vault", "packagie_internal_user").map_err(|e| e.to_string())?;
     
     match entry.set_password(secret_pass.expose_secret()) {
         Ok(_) => {
-            println!("[KEYRING DEBUG] SUCCESS: Password written to Windows Credential Manager.");
+            println!("[KEYRING DEBUG] SUCCESS: Password locked in vault.");
             Ok(())
         },
         Err(e) => {
-            println!("[KEYRING DEBUG] FAILED to write to OS: {}", e);
+            println!("[KEYRING DEBUG] FAILED: {}", e);
             Err(e.to_string())
         }
     }
 }
 
 #[tauri::command]
-fn has_saved_password(username: String) -> bool {
-    println!("\n[KEYRING DEBUG] Looking up password for: {}", username);
-    
-    if let Ok(entry) = Entry::new("packagie_dutchie_auth", &username) {
-        match entry.get_password() {
-            Ok(_) => {
-                println!("[KEYRING DEBUG] SUCCESS: Password found in OS vault.");
-                true
-            },
-            Err(e) => {
-                println!("[KEYRING DEBUG] FAILED: Password not found. OS Error: {}", e);
-                false
-            }
-        }
+fn has_saved_password() -> bool {
+    // Check the static vault
+    if let Ok(entry) = Entry::new("packagie_vault", "packagie_internal_user") {
+        entry.get_password().is_ok()
     } else {
-        println!("[KEYRING DEBUG] FAILED: Could not create Keyring Entry.");
         false
     }
 }
 
 #[tauri::command]
 async fn auto_login(app: tauri::AppHandle, username: String) -> Result<(), String> {
-    println!("\n[KEYRING DEBUG] Auto-login triggered for: {}", username);
     let dutchie_window = app.get_webview_window("dutchie").ok_or("Dutchie window not found.")?;
 
-    let entry = Entry::new("packagie_dutchie_auth", &username).map_err(|e| e.to_string())?;
-    let stored_pass = entry.get_password().map_err(|e| {
-        println!("[KEYRING DEBUG] Auto-login failed to read password: {}", e);
-        e.to_string()
-    })?;
+    // Pull from the static vault
+    let entry = Entry::new("packagie_vault", "packagie_internal_user").map_err(|e| e.to_string())?;
+    let stored_pass = entry.get_password().map_err(|_| "No password found".to_string())?;
     
-    println!("[KEYRING DEBUG] Auto-login successfully retrieved password from OS.");
     let secret_pass = SecretString::from(stored_pass);
 
+    // We still use the 'username' parameter here so we can inject it into the web page!
     let safe_user = serde_json::to_string(&username).unwrap_or_default();
     let safe_pass = serde_json::to_string(secret_pass.expose_secret()).unwrap_or_default();
-    
+
     let js_payload = format!(r#"
         (function() {{
             const injectedUser = {};
