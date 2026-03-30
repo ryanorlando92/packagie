@@ -11,6 +11,7 @@ Packagie mimics human interaction to safely and accurately inject NDC, quantity,
 * **Credential Vault:** Save your username & password once, and packagie will log in for you every time.
 * **Excel Parsing:** Reads an `.xlsx` inventory prep file and parses the data.
 * **Automated Data Entry:** Uses a hybrid approach of JavaScript DOM manipulation and synthetic event dispatching to trick React/MUI.
+* **Runs in Background** Work on other tasks while Packagie happily runs in the background.
 * **Full Order Input:** Currently processes one row per 7 seconds, turning an hours long task into a 5 minute coffee break.
 
 ## Features
@@ -30,16 +31,10 @@ Thats it! Yes it's that easy.
 
 ## Known Issues
 
-Due to the aggressive state management and security features of modern Single Page Applications (SPAs) like Dutchie, there are a few strict rules and known bugs when running the automation:
-
-**Focus is King:** The Dutchie "Receive Inventory" window must remain actively focused. If the window loses focus, the background throttling will prevent the synthetic Escape key from firing, and the expiration/packaging dates will fail to save. Do not touch your mouse or keyboard while an import is running.
-
 **Single Page Application DOM Bloat:** As the number of processed rows increases, React fails to garbage-collect the hidden modal nodes. The time it takes to complete a row increases by up to 3 seconds. Currently, the script may break or collide if processing more than 60-70 rows continuously.
 
 ## Roadmap / Planned Features
 I am actively working to make Packagie more robust and feature-rich. The following updates are planned:
-
-[ ] Real encryption
 
 [ ] Stateful DOM Washing: To fix the DOM bloat issue slowing down large imports, the script will automatically pause, save the current row progress, hard-refresh the page, navigate back to the active order, and resume processing.
 
