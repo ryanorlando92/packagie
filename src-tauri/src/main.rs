@@ -50,7 +50,7 @@ fn save_credentials(password: String) -> Result<(), String> {
     let secret_pass = SecretString::from(password);
     
     // Use a hardcoded, safe string to bypass OS parsing bugs!
-    let entry = Entry::new("packagie_vault", "packagie_internal_user").map_err(|e| e.to_string())?;
+    let entry = Entry::new("PackagieVault", "packagie_internal_user").map_err(|e| e.to_string())?;
     
     match entry.set_password(secret_pass.expose_secret()) {
         Ok(_) => {
@@ -67,7 +67,7 @@ fn save_credentials(password: String) -> Result<(), String> {
 #[tauri::command]
 fn has_saved_password() -> bool {
     // Check the static vault
-    if let Ok(entry) = Entry::new("packagie_vault", "packagie_internal_user") {
+    if let Ok(entry) = Entry::new("PackagieVault", "packagie_internal_user") {
         entry.get_password().is_ok()
     } else {
         false
@@ -79,7 +79,7 @@ async fn auto_login(app: tauri::AppHandle, username: String) -> Result<(), Strin
     let dutchie_window = app.get_webview_window("dutchie").ok_or("Dutchie window not found.")?;
 
     // Pull from the static vault
-    let entry = Entry::new("packagie_vault", "packagie_internal_user").map_err(|e| e.to_string())?;
+    let entry = Entry::new("PackagieVault", "packagie_internal_user").map_err(|e| e.to_string())?;
     let stored_pass = entry.get_password().map_err(|_| "No password found".to_string())?;
     
     let secret_pass = SecretString::from(stored_pass);
@@ -301,7 +301,6 @@ fn main() {
                     if let Some(dutchie) = app.get_webview_window("dutchie") {
                         let _ = dutchie.destroy();
                     }
-                    app.exit(0);
                 }
             }
         })
