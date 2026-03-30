@@ -45,33 +45,63 @@ fn format_excel_date(data: &Data) -> String {
 }
 
 #[tauri::command]
-fn save_credentials(username: String, password: SecretString) -> Result<(), String> {
+fn save_credentials(username: String, password: String) -> Result<(), String> {
+    println!("\n[KEYRING DEBUG] Attempting to save password for: {}", username);
+    
+    // We accept a standard String from React, then immediately lock it in a SecretString
+    let secret_pass = SecretString::from(password);
     let entry = Entry::new("packagie_dutchie_auth", &username).map_err(|e| e.to_string())?;
-    entry.set_password(password.expose_secret()).map_err(|e| e.to_string())?;
-    Ok(())
+    
+    match entry.set_password(secret_pass.expose_secret()) {
+        Ok(_) => {
+            println!("[KEYRING DEBUG] SUCCESS: Password written to Windows Credential Manager.");
+            Ok(())
+        },
+        Err(e) => {
+            println!("[KEYRING DEBUG] FAILED to write to OS: {}", e);
+            Err(e.to_string())
+        }
+    }
 }
 
 #[tauri::command]
 fn has_saved_password(username: String) -> bool {
+    println!("\n[KEYRING DEBUG] Looking up password for: {}", username);
+    
     if let Ok(entry) = Entry::new("packagie_dutchie_auth", &username) {
-        entry.get_password().is_ok()
+        match entry.get_password() {
+            Ok(_) => {
+                println!("[KEYRING DEBUG] SUCCESS: Password found in OS vault.");
+                true
+            },
+            Err(e) => {
+                println!("[KEYRING DEBUG] FAILED: Password not found. OS Error: {}", e);
+                false
+            }
+        }
     } else {
+        println!("[KEYRING DEBUG] FAILED: Could not create Keyring Entry.");
         false
     }
 }
 
 #[tauri::command]
 async fn auto_login(app: tauri::AppHandle, username: String) -> Result<(), String> {
-    let dutchie_window = app
-        .get_webview_window("dutchie")
-        .ok_or("Dutchie window not found.")?;
+    println!("\n[KEYRING DEBUG] Auto-login triggered for: {}", username);
+    let dutchie_window = app.get_webview_window("dutchie").ok_or("Dutchie window not found.")?;
 
     let entry = Entry::new("packagie_dutchie_auth", &username).map_err(|e| e.to_string())?;
-    let stored_pass = entry.get_password().map_err(|_| "No password found in keychain".to_string())?;
+    let stored_pass = entry.get_password().map_err(|e| {
+        println!("[KEYRING DEBUG] Auto-login failed to read password: {}", e);
+        e.to_string()
+    })?;
+    
+    println!("[KEYRING DEBUG] Auto-login successfully retrieved password from OS.");
     let secret_pass = SecretString::from(stored_pass);
+
     let safe_user = serde_json::to_string(&username).unwrap_or_default();
     let safe_pass = serde_json::to_string(secret_pass.expose_secret()).unwrap_or_default();
-
+    
     let js_payload = format!(r#"
         (function() {{
             const injectedUser = {};
