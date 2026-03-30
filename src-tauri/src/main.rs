@@ -86,7 +86,7 @@ async fn auto_login(app: tauri::AppHandle, username: String, pass: String) -> Re
             attemptLogin();
         }})();
     "#, safe_user, safe_pass);
-
+    sleep(Duration::from_secs(4)).await;
     dutchie_window.eval(&js_payload).map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -159,13 +159,22 @@ async fn start_import(app: AppHandle, file_path: String) -> Result<(), String> {
                     // Steal focus away from the date picker so it saves
                     if (isDate) {{
                         await delay(100);
-                        el.dispatchEvent(new KeyboardEvent("keydown", {{ key: "Escape", keyCode: 27, bubbles: true }}));
                         
-                        const header = document.querySelector("h2.MuiDialogTitle-root") || document.querySelector("h2");
-                        if (header) {{
-                            header.dispatchEvent(new MouseEvent("mousedown", {{ bubbles: true }}));
-                            header.dispatchEvent(new MouseEvent("mouseup", {{ bubbles: true }}));
-                            header.click();
+                        // 1. Fire Escape globally, not just on the input, because MUI traps focus
+                        document.activeElement.dispatchEvent(new KeyboardEvent("keydown", {{ key: "Escape", code: "Escape", keyCode: 27, bubbles: true }}));
+                        document.body.dispatchEvent(new KeyboardEvent("keydown", {{ key: "Escape", code: "Escape", keyCode: 27, bubbles: true }}));
+                        
+                        // 2. Click outside the popup! (The body, or the MUI backdrop)
+                        const backdrop = document.querySelector('.MuiBackdrop-root');
+                        if (backdrop) {{
+                            backdrop.dispatchEvent(new MouseEvent("mousedown", {{ bubbles: true }}));
+                            backdrop.dispatchEvent(new MouseEvent("mouseup", {{ bubbles: true }}));
+                            backdrop.click();
+                        }} else {{
+                            // Fallback if backdrop isn't found: click the absolute top-left of the page
+                            const fakeClick = new MouseEvent('mousedown', {{ bubbles: true, clientX: 0, clientY: 0 }});
+                            document.body.dispatchEvent(fakeClick);
+                            document.body.dispatchEvent(new MouseEvent('mouseup', {{ bubbles: true, clientX: 0, clientY: 0 }}));
                         }}
                     }}
 
