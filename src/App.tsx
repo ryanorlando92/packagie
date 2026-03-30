@@ -5,8 +5,47 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { check } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { confirm, message } from '@tauri-apps/plugin-dialog';
-import { load } from '@tauri-apps/plugin-store';
+import { LazyStore } from '@tauri-apps/plugin-store';
 
+const store = new LazyStore('settings.json');
+
+const SecureStore = {
+    async getKey(hardwareSeed: string) {
+        const enc = new TextEncoder();
+        const keyMaterial = await crypto.subtle.importKey(
+            "raw", enc.encode(hardwareSeed), { name: "PBKDF2" }, false, ["deriveKey"]
+        );
+        return await crypto.subtle.deriveKey(
+            { name: "PBKDF2", salt: enc.encode("packagie_salt"), iterations: 100000, hash: "SHA-256" },
+            keyMaterial, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]
+        );
+    },
+    async encrypt(plainText: string, hardwareSeed: string) {
+        if (!plainText) return "";
+        const key = await this.getKey(hardwareSeed);
+        const iv = crypto.getRandomValues(new Uint8Array(12));
+        const enc = new TextEncoder();
+        const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, enc.encode(plainText));
+        const combined = new Uint8Array(iv.length + encrypted.byteLength);
+        combined.set(iv);
+        combined.set(new Uint8Array(encrypted), iv.length);
+        return btoa(String.fromCharCode(...combined));
+    },
+    async decrypt(cipherText: string, hardwareSeed: string) {
+        if (!cipherText) return "";
+        try {
+            const key = await this.getKey(hardwareSeed);
+            const combined = new Uint8Array(atob(cipherText).split('').map(c => c.charCodeAt(0)));
+            const iv = combined.slice(0, 12);
+            const data = combined.slice(12);
+            const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, data);
+            return new TextDecoder().decode(decrypted);
+        } catch (e) {
+            console.warn("Could not decrypt password.");
+            return ""; 
+        }
+    }
+};
 
 export default function App() {
     const hasAttemptedLogin = useRef(false);
@@ -27,14 +66,16 @@ export default function App() {
 
     const triggerAutoLogin = async () => {
         try {
-            const store = await load('settings.json');
             const savedUsername = await store.get<string>('username');
+            const savedEncryptedPass = await store.get<string>('password');
 
-            if (savedUsername) {
-                const hasPass = await invoke<boolean>('has_saved_password');
-                if (hasPass) {
-                    console.log("OS Credentials found. Triggering backend injection...");
-                    await invoke('auto_login', { username: savedUsername });
+            if (savedUsername && savedEncryptedPass) {
+                const hardwareKey = await invoke<string>('get_hardware_key');
+                const decryptedPass = await SecureStore.decrypt(savedEncryptedPass, hardwareKey);
+                
+                if (decryptedPass) {
+                    console.log("Credentials found. Triggering auto-login...");
+                    await invoke('auto_login', { username: savedUsername, pass: decryptedPass });
                 }
             }
         } catch (error) {
@@ -44,17 +85,17 @@ export default function App() {
 
     const openSettings = async () => {
         try {
-            const store = await load('settings.json');
             const savedUser = await store.get<string>('username');
+            const savedEncryptedPass = await store.get<string>('password');
 
-            if (savedUser) {
-                setUsername(savedUser);
-                const hasPass = await invoke<boolean>('has_saved_password',);
-                if (hasPass) {
-                    // Display a dummy string so you know a password is saved
-                    setPassword('********'); 
-                }
+            if (savedUser) setUsername(savedUser);
+            
+            if (savedEncryptedPass) {
+                const hardwareKey = await invoke<string>('get_hardware_key');
+                const decryptedPass = await SecureStore.decrypt(savedEncryptedPass, hardwareKey);
+                if (decryptedPass) setPassword(decryptedPass);
             }
+            
             setShowSettings(true);
         } catch (error) {
             console.error("Failed to load settings into UI:", error);
@@ -63,25 +104,21 @@ export default function App() {
     };
 
     const saveSettings = async () => {
-        const store = await load('settings.json');
+        const hardwareKey = await invoke<string>('get_hardware_key');
         
-        try {
-            // 1. Save the non-sensitive username to the standard store
-            await store.set('username', username);
-            await store.save();
-            
-            // 2. If they typed a new password, send it directly to the OS Keychain
-            if (password && password !== '********') {
-                await invoke('save_credentials', { password });
-            }
-            
-            await message("Your credentials have been securely saved.", {
-                title: 'Vault Updated',
-                kind: 'info'
-            });
-        } catch (err) {
-            console.error('Failed to save credentials:', err);
+        await store.set('username', username);
+        
+        if (password) {
+            const encrypted = await SecureStore.encrypt(password, hardwareKey);
+            await store.set('password', encrypted);
         }
+        
+        await store.save(); 
+        
+        await message("Your credentials have been securely encrypted and saved.", {
+            title: 'Settings Saved',
+            kind: 'info'
+        });
 
         setShowSettings(false);
     };

@@ -6,8 +6,6 @@ use serde::Serialize;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 use tokio::time::sleep;
-use keyring::Entry;
-use secrecy::{ExposeSecret, SecretString};
 
 #[derive(Clone, Serialize)]
 struct ProgressStatus {
@@ -45,48 +43,16 @@ fn format_excel_date(data: &Data) -> String {
 }
 
 #[tauri::command]
-fn save_credentials(password: String) -> Result<(), String> {
-    println!("\n[KEYRING DEBUG] Saving password to Packagie vault...");
-    let secret_pass = SecretString::from(password);
-    
-    // Use a hardcoded, safe string to bypass OS parsing bugs!
-    let entry = Entry::new("PackagieVault", "packagie_internal_user").map_err(|e| e.to_string())?;
-    
-    match entry.set_password(secret_pass.expose_secret()) {
-        Ok(_) => {
-            println!("[KEYRING DEBUG] SUCCESS: Password locked in vault.");
-            Ok(())
-        },
-        Err(e) => {
-            println!("[KEYRING DEBUG] FAILED: {}", e);
-            Err(e.to_string())
-        }
-    }
+fn get_hardware_key() -> Result<String, String> {
+    machine_uid::get().map_err(|_| "Failed to fetch Hardware UUID".to_string())
 }
 
 #[tauri::command]
-fn has_saved_password() -> bool {
-    // Check the static vault
-    if let Ok(entry) = Entry::new("PackagieVault", "packagie_internal_user") {
-        entry.get_password().is_ok()
-    } else {
-        false
-    }
-}
-
-#[tauri::command]
-async fn auto_login(app: tauri::AppHandle, username: String) -> Result<(), String> {
+async fn auto_login(app: tauri::AppHandle, username: String, pass: String) -> Result<(), String> {
     let dutchie_window = app.get_webview_window("dutchie").ok_or("Dutchie window not found.")?;
 
-    // Pull from the static vault
-    let entry = Entry::new("PackagieVault", "packagie_internal_user").map_err(|e| e.to_string())?;
-    let stored_pass = entry.get_password().map_err(|_| "No password found".to_string())?;
-    
-    let secret_pass = SecretString::from(stored_pass);
-
-    // We still use the 'username' parameter here so we can inject it into the web page!
     let safe_user = serde_json::to_string(&username).unwrap_or_default();
-    let safe_pass = serde_json::to_string(secret_pass.expose_secret()).unwrap_or_default();
+    let safe_pass = serde_json::to_string(&pass).unwrap_or_default();
 
     let js_payload = format!(r#"
         (function() {{
@@ -319,7 +285,7 @@ fn main() {
             .build()?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![start_import, save_credentials, has_saved_password, auto_login])
+        .invoke_handler(tauri::generate_handler![start_import, get_hardware_key, auto_login])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
