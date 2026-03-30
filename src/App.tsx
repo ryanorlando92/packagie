@@ -66,6 +66,8 @@ export default function App() {
 
     const triggerAutoLogin = async () => {
         try {
+            const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+            sleep(4000);
             const savedUsername = await store.get<string>('username');
             const savedEncryptedPass = await store.get<string>('password');
 

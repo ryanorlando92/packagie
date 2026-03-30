@@ -86,7 +86,7 @@ async fn auto_login(app: tauri::AppHandle, username: String, pass: String) -> Re
             attemptLogin();
         }})();
     "#, safe_user, safe_pass);
-    sleep(Duration::from_secs(4)).await;
+    sleep(Duration::from_secs(1)).await;
     dutchie_window.eval(&js_payload).map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -136,7 +136,6 @@ async fn start_import(app: AppHandle, file_path: String) -> Result<(), String> {
             (async function() {{
                 const delay = ms => new Promise(r => setTimeout(r, ms));
                 
-                // NEW: Added isDate parameter for aggressive popper closing
                 const injectField = async (identifier, val, isDate = false) => {{
                     if (!val || val === "") return;
                     let el = document.getElementById(identifier);
@@ -149,14 +148,16 @@ async fn start_import(app: AppHandle, file_path: String) -> Result<(), String> {
                         if (clearBtn) {{ clearBtn.click(); await delay(100); }}
                     }}
 
-                    el.focus(); el.click(); await delay(50);
+                    el.focus(); 
+                    // el.click(); 
+                    await delay(50);
                     const ns = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
                     ns.call(el, val);
                     el.dispatchEvent(new Event("input", {{ bubbles: true }}));
                     el.dispatchEvent(new Event("change", {{ bubbles: true }}));
                     el.dispatchEvent(new KeyboardEvent("keydown", {{ key: "Enter", keyCode: 13, bubbles: true }}));
                     
-                    // Steal focus away from the date picker so it saves
+                    /* Steal focus away from the date picker so it saves
                     if (isDate) {{
                         await delay(100);
                         
@@ -176,7 +177,7 @@ async fn start_import(app: AppHandle, file_path: String) -> Result<(), String> {
                             document.body.dispatchEvent(fakeClick);
                             document.body.dispatchEvent(new MouseEvent('mouseup', {{ bubbles: true, clientX: 0, clientY: 0 }}));
                         }}
-                    }}
+                    }} */
 
                     el.blur();
                     await delay(150);
