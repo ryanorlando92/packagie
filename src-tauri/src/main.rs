@@ -6,6 +6,8 @@ use serde::Serialize;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 use tokio::time::sleep;
+use keyring::Entry;
+use secrecy::{ExposeSecret, SecretString};
 
 #[derive(Clone, Serialize)]
 struct ProgressStatus {
@@ -25,7 +27,6 @@ fn emit_progress(app: &AppHandle, current: usize, total: usize, message: &str) {
     );
 }
 
-// The Date Formatter that worked perfectly
 fn format_excel_date(data: &Data) -> String {
     let raw = data.to_string();
     if raw.trim().is_empty() {
@@ -44,20 +45,32 @@ fn format_excel_date(data: &Data) -> String {
 }
 
 #[tauri::command]
-fn get_os_username() -> String {
-    std::env::var("USER")
-        .unwrap_or_else(|_| std::env::var("USERNAME").unwrap_or_else(|_| "unknown".to_string()))
+fn save_credentials(username: String, password: SecretString) -> Result<(), String> {
+    let entry = Entry::new("packagie_dutchie_auth", &username).map_err(|e| e.to_string())?;
+    entry.set_password(password.expose_secret()).map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 #[tauri::command]
-async fn auto_login(app: tauri::AppHandle, user: String, pass: String) -> Result<(), String> {
+fn has_saved_password(username: String) -> bool {
+    if let Ok(entry) = Entry::new("packagie_dutchie_auth", &username) {
+        entry.get_password().is_ok()
+    } else {
+        false
+    }
+}
+
+#[tauri::command]
+async fn auto_login(app: tauri::AppHandle, username: String) -> Result<(), String> {
     let dutchie_window = app
         .get_webview_window("dutchie")
         .ok_or("Dutchie window not found.")?;
 
-    // Safely serialize the strings to prevent JS injection breaking the syntax
-    let safe_user = serde_json::to_string(&user).unwrap_or_default();
-    let safe_pass = serde_json::to_string(&pass).unwrap_or_default();
+    let entry = Entry::new("packagie_dutchie_auth", &username).map_err(|e| e.to_string())?;
+    let stored_pass = entry.get_password().map_err(|_| "No password found in keychain".to_string())?;
+    let secret_pass = SecretString::from(stored_pass);
+    let safe_user = serde_json::to_string(&username).unwrap_or_default();
+    let safe_pass = serde_json::to_string(secret_pass.expose_secret()).unwrap_or_default();
 
     let js_payload = format!(r#"
         (function() {{
@@ -267,7 +280,11 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .on_window_event(|_window, event| {
             if let tauri::WindowEvent::Destroyed = event {
-                std::process::exit(0);
+                let app = _window.app_handle();
+                if let Some(dutchie) = app.get_webview_window("dutchie") {
+                    let _ = dutchie.destroy();
+                }
+                app.exit(0);
             }
         })
         .setup(|app| {
@@ -285,7 +302,7 @@ fn main() {
             .build()?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![start_import, get_os_username, auto_login])
+        .invoke_handler(tauri::generate_handler![start_import, save_credentials, has_saved_password, auto_login])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
