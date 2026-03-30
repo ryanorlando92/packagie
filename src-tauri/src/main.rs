@@ -280,11 +280,13 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .on_window_event(|_window, event| {
             if let tauri::WindowEvent::Destroyed = event {
-                let app = _window.app_handle();
-                if let Some(dutchie) = app.get_webview_window("dutchie") {
-                    let _ = dutchie.destroy();
+                if _window.label() == "main" {
+                    let app = _window.app_handle();
+                    if let Some(dutchie) = app.get_webview_window("dutchie") {
+                        let _ = dutchie.destroy();
+                    }
+                    app.exit(0);
                 }
-                app.exit(0);
             }
         })
         .setup(|app| {
