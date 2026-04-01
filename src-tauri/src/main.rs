@@ -87,7 +87,7 @@ async fn auto_login(app: tauri::AppHandle, username: String, pass: String) -> Re
                     if (loginBtn) {{
                         setTimeout(() => loginBtn.click(), 500); 
                     }}
-                }} else if (attempts < 20) {{
+                }} else if (attempts < 2) {{
                     setTimeout(attemptLogin, 500);
                 }}
             }};
@@ -95,16 +95,11 @@ async fn auto_login(app: tauri::AppHandle, username: String, pass: String) -> Re
         }})();
     "#, safe_user, safe_pass);
 
-    // 2. THE CARPET BOMB: Detach a background thread in Rust
-    // This allows the Tauri command to return 'Ok' immediately so React doesn't hang.
-    let window_clone = dutchie_window.clone();
-    
     tokio::spawn(async move {
-        // Fire the injection payload 8 times, every 1.5 seconds.
         // This guarantees we catch the page AFTER all 302 Redirects are finished.
-        for _ in 0..8 {
-            tokio::time::sleep(Duration::from_millis(1500)).await;
-            let _ = window_clone.eval(&js_payload);
+        for _ in 0..3 {
+            tokio::time::sleep(Duration::from_millis(1800)).await;
+            let _ = dutchie_window.eval(&js_payload);
         }
     });
 
