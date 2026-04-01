@@ -8,10 +8,10 @@ Packagie mimics human interaction to safely and accurately inject NDC, quantity,
 
 ## How it Works
 
-* **Credential Vault:** Save your username & password once, and packagie will log in for you every time.
+* **Credential Vault:** Save your username & password once, and packagie will log in for you every time. (Work in Progress, not yet supported in Windows)
 * **Excel Parsing:** Reads an `.xlsx` inventory prep file and parses the data.
 * **Automated Data Entry:** Uses a hybrid approach of JavaScript DOM manipulation and synthetic event dispatching to trick React/MUI.
-* **Runs in Background** Work on other tasks while Packagie happily runs in the background.
+* **Pause in Background** Packagie will pause if you navigate away from the window.
 * **Full Order Input:** Currently processes one row per 7 seconds, turning an hours long task into a 5 minute coffee break.
 
 ## Features
