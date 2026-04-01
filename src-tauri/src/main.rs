@@ -56,6 +56,9 @@ async fn auto_login(app: tauri::AppHandle, username: String, pass: String) -> Re
 
     let js_payload = format!(r#"
         (function() {{
+            if (window.__packagie_injected) return;
+            window.__packagie_injected = true;
+
             const injectedUser = {};
             const injectedPass = {};
             let attempts = 0;
@@ -68,7 +71,9 @@ async fn auto_login(app: tauri::AppHandle, username: String, pass: String) -> Re
 
             const attemptLogin = () => {{
                 attempts++;
-                const userField = document.querySelector('input[data-testid="login-page_input_username"], input[placeholder="Username"]');
+                
+                // Added a few extra fallback selectors just in case Dutchie changes their DOM
+                const userField = document.querySelector('input[data-testid="login-page_input_username"], input[placeholder="Username"], input[name="username"]');
                 const passField = document.querySelector('input[type="password"]');
 
                 if (userField && passField) {{
@@ -86,8 +91,20 @@ async fn auto_login(app: tauri::AppHandle, username: String, pass: String) -> Re
             attemptLogin();
         }})();
     "#, safe_user, safe_pass);
-    sleep(Duration::from_secs(1)).await;
-    dutchie_window.eval(&js_payload).map_err(|e| e.to_string())?;
+
+    // 2. THE CARPET BOMB: Detach a background thread in Rust
+    // This allows the Tauri command to return 'Ok' immediately so React doesn't hang.
+    let window_clone = dutchie_window.clone();
+    
+    tokio::spawn(async move {
+        // Fire the injection payload 8 times, every 1.5 seconds.
+        // This guarantees we catch the page AFTER all 302 Redirects are finished.
+        for _ in 0..8 {
+            tokio::time::sleep(Duration::from_millis(1500)).await;
+            let _ = window_clone.eval(&js_payload);
+        }
+    });
+
     Ok(())
 }
 
