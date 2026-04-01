@@ -5,7 +5,10 @@ use chrono::{Duration as ChronoDuration, NaiveDate};
 use serde::Serialize;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri_plugin_dialog::DialogExt;
+use tokio::sync::oneshot;
 use tokio::time::sleep;
+
 
 #[derive(Clone, Serialize)]
 struct ProgressStatus {
@@ -128,6 +131,31 @@ async fn start_import(app: AppHandle, file_path: String) -> Result<(), String> {
     let total_rows = range.get_size().0.saturating_sub(1);
 
     for (i, row) in range.rows().skip(1).enumerate() {
+
+        if !dutchie_window.is_focused().unwrap_or(true) {
+            
+            // Create a channel to pause the async thread
+            let (tx, rx) = oneshot::channel();
+
+            // Trigger the native OS popup overlay
+            app.dialog()
+                .message("Automation paused because the window lost focus.\n\nPlease ensure the Receive Inventory window is active, then click OK to resume.")
+                .title("Packagie Paused")
+                .kind(tauri_plugin_dialog::MessageDialogKind::Warning)
+                .show(move |_| {
+                    // This closure fires ONLY when the user clicks 'OK'
+                    let _ = tx.send(()); 
+                });
+
+            // This line physically suspends the Rust `for` loop here. 
+            // It uses 0% CPU while waiting for the user to click OK.
+            let _ = rx.await;
+
+            // Once OK is clicked, give the browser 500ms to wake up its 
+            // rendering engine before we shoot the next JavaScript payload at it.
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+
         let current_row = i + 1;
 
         let metrc = row.get(0).map(|d| d.to_string()).unwrap_or_default();
@@ -255,7 +283,7 @@ async fn start_import(app: AppHandle, file_path: String) -> Result<(), String> {
         dutchie_window
             .eval(&js_payload)
             .map_err(|e| e.to_string())?;
-        sleep(Duration::from_millis(5500)).await;
+        sleep(Duration::from_millis(5000)).await;
 
         if current_row > 10 {
             sleep(Duration::from_millis(500)).await;
@@ -270,10 +298,10 @@ async fn start_import(app: AppHandle, file_path: String) -> Result<(), String> {
             sleep(Duration::from_millis(500)).await;
         }
         if current_row > 40 {
-            sleep(Duration::from_millis(1000)).await;
+            sleep(Duration::from_millis(500)).await;
         }
         if current_row > 45 {
-            sleep(Duration::from_millis(1000)).await;
+            sleep(Duration::from_millis(500)).await;
         }
     }
 
