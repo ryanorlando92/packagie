@@ -8,6 +8,7 @@ import { confirm, message } from '@tauri-apps/plugin-dialog';
 import { LazyStore } from '@tauri-apps/plugin-store';
 
 const store = new LazyStore('settings.json');
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 const SecureStore = {
     async getKey(hardwareSeed: string) {
@@ -60,15 +61,13 @@ export default function App() {
 
     useEffect(() => {
         if (!hasAttemptedLogin.current) {
-            hasAttemptedLogin.current = true;
             triggerAutoLogin();
         }
     }, []);
 
     const triggerAutoLogin = async () => {
         try {
-            const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-            sleep(4000);
+            sleep(100);
             const savedUsername = await store.get<string>('username');
             const savedEncryptedPass = await store.get<string>('password');
 
@@ -79,6 +78,7 @@ export default function App() {
                 if (decryptedPass) {
                     console.log("Credentials found. Triggering auto-login...");
                     await invoke('auto_login', { username: savedUsername, pass: decryptedPass });
+                    hasAttemptedLogin.current = true;
                 }
             }
         } catch (error) {
