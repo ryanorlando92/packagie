@@ -10,6 +10,19 @@ import { LazyStore } from '@tauri-apps/plugin-store';
 const store = new LazyStore('settings.json');
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+interface MissingField {
+    row_idx: number;
+    col_idx: number;
+    row_name: string;
+    field_name: string;
+}
+
+interface FieldUpdate {
+    row_idx: number;
+    col_idx: number;
+    value: string;
+}
+
 const SecureStore = {
     async getKey(hardwareSeed: string) {
         const enc = new TextEncoder();
@@ -58,6 +71,11 @@ export default function App() {
     const [progress, setProgress] = useState(0);
     const [isProcessing, setIsProcessing] = useState(false);
     const [isBh, set_isBh] = useState(false);
+    const [isFixerOpen, setIsFixerOpen] = useState(false);
+    const [currentFixIndex, setCurrentFixIndex] = useState(0);
+    const [fixInputValue, setFixInputValue] = useState('');
+    const [missingFields, setMissingFields] = useState<MissingField[]>([]);
+    const [pendingFixes, setPendingFixes] = useState<FieldUpdate[]>([]);
 
     useEffect(() => {
         if (!hasAttemptedLogin.current) {
@@ -155,13 +173,75 @@ export default function App() {
         }
     };
 
+    const startFieldFixer = async () => {
+    if (!filePath) {
+        await message("Please select an Excel file first.", { title: "Error", kind: "error" });
+        return;
+    }
+    try {
+        const emptyFields: any = await invoke('scan_empty_fields', { filePath });
+        if (emptyFields.length === 0) {
+            await message("No empty fields found in the target columns!", { title: "All Good", kind: "info" });
+            return;
+        }
+        setMissingFields(emptyFields);
+        setCurrentFixIndex(0);
+        setFixInputValue('');
+        setPendingFixes([]);
+        setIsFixerOpen(true);
+    } catch (error: any) {
+        await message(error, { title: "Scan Error", kind: "error" });
+    }
+};
+
+    const handleNextFix = async () => {
+    const currentField = missingFields[currentFixIndex];
+    const updatedFixes = [...pendingFixes];
+
+    if (fixInputValue.trim() !== '') {
+        updatedFixes.push({
+            row_idx: currentField.row_idx,
+            col_idx: currentField.col_idx,
+            value: fixInputValue
+        });
+    }
+
+    setPendingFixes(updatedFixes);
+
+    if (currentFixIndex < missingFields.length - 1) {
+        setCurrentFixIndex(currentFixIndex + 1);
+        setFixInputValue('');
+    } else {
+        // End of the list reached! Save everything and close.
+        await saveAndCloseFixer(updatedFixes);
+    }
+};
+
+const handleCancelFix = async () => {
+    // Save whatever they entered up to this point, then close.
+    await saveAndCloseFixer(pendingFixes);
+};
+
+const saveAndCloseFixer = async (updatesToSave: any) => {
+    try {
+        if (updatesToSave.length > 0) {
+            await invoke('save_empty_fields', { filePath, updates: updatesToSave });
+            await message(`Successfully saved ${updatesToSave.length} fields back to the Excel file!`, { title: 'Saved', kind: 'info' });
+        }
+    } catch (e:any) {
+        await message(e, { title: 'Save Error', kind: 'error' });
+    } finally {
+        setIsFixerOpen(false);
+    }
+};
+
     return (
         <main className="container">            
         <div style={{ fontFamily: 'Verdana, sans-serif' }}>
         <h2
             style={{ margin: '0px' }}
         >Dutchie Package Importer</h2>
-        <div style={{ display: 'flex', gap: '10px', margin: '20px' }}>
+        <div style={{ display: 'flex', gap: '10px', margin: '5px' }}>
             <input 
             type="text" 
             value={filePath} 
@@ -172,29 +252,39 @@ export default function App() {
             <button onClick={handleSelectFile} disabled={isProcessing}>Browse</button>
         </div>
         <div className="checkbox-wrapper">
-    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-        <input 
-            type="checkbox" 
-            checked={isBh} 
-            onChange={(e) => set_isBh(e.target.checked)} 
-        />
-        Beyond Hello
-    </label>
-</div>
+            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', margin: '10px' }}>
+                <input 
+                    type="checkbox" 
+                    checked={isBh} 
+                    onChange={(e) => set_isBh(e.target.checked)} 
+                />
+                Beyond Hello
+            </label>
+        </div>
+    <div style={{ display: 'flex', alignContent: 'center', justifyContent: 'center', flexDirection: 'row'}}>
         <button 
             onClick={handleStart} 
             disabled={isProcessing || !filePath} 
-            style={{ padding: '10px 20px', fontWeight: 'bold', width: '50%', margin: '20px' }}
+            style={{ padding: '10px 20px', fontWeight: 'bold', width: '30%', margin: '10px' }}
         >
             {isProcessing ? 'IMPORTING...' : 'START IMPORT'}
         </button>
+
         <button 
-            style={{ margin: '20px' }}
+            onClick={startFieldFixer}
+            style={{ padding: '10px 20px', fontWeight: 'bold', width: '30%', margin: '10px' }}
+        >
+            Fill Empty Fields
+        </button>
+    </div> 
+    <div style={{ display: 'flex', alignContent: 'center', justifyContent: 'center' }}>
+        <button 
+            style={{ padding: '10px 20px', fontWeight: 'bold', width: '30%', margin: '10px' }}
             onClick={() => showSettings ? setShowSettings(false) : openSettings()}
             >
                 {showSettings ? '❌ Close Settings' : '⚙️ Settings'}
-            </button>
-
+        </button>
+     </div>  
             {showSettings && (
                 <div className="settings-panel">
                     <h3
@@ -214,7 +304,9 @@ export default function App() {
                         onChange={(e) => setPassword(e.target.value)} 
                         style={{ padding: '5px 10px', width: '80%', margin: '10px' }} 
                     />
-                    <button onClick={saveSettings}>Save Credentials</button>
+                    <button onClick={saveSettings}>
+                        Save Credentials
+                    </button>
                 </div>
                 )}
         <div style={{ marginTop: '20px' }}>
@@ -222,7 +314,46 @@ export default function App() {
             <progress value={progress} max="100" style={{ width: '100%', height: '20px' }} />
         </div>
         </div>
-            </main>
+
+        {isFixerOpen && (
+            <div style={{
+                position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+                backgroundColor: 'rgba(0,0,0,0.7)', display: 'flex', justifyContent: 'center',
+                alignItems: 'center', zIndex: 9999
+            }}>
+                <div style={{
+                    backgroundColor: '#1e1e1e', padding: '30px', borderRadius: '12px', color: '#ffffff',
+                    width: '400px', boxShadow: '0 10px 30px rgba(0,0,0,0.5)', border: '1px solid #333'
+                }}>
+                    <h2 style={{ marginTop: 0 }}>Missing Data Wizard</h2>
+                    
+                    <div style={{ margin: '20px 0', padding: '15px', backgroundColor: '#2a2a2a', borderRadius: '8px' }}>
+                        <p style={{ margin: '0 0 10px 0' }}><strong>Product:</strong> <br/> {missingFields[currentFixIndex]?.row_name}</p>
+                        <p style={{ margin: 0 }}><strong>Needs:</strong> <br/> <span style={{ color: '#ff6b6b', fontSize: '18px', fontWeight: 'bold' }}>{missingFields[currentFixIndex]?.field_name}</span></p>
+                    </div>
+
+                    <input 
+                        type="text" 
+                        value={fixInputValue} 
+                        onChange={(e) => setFixInputValue(e.target.value)} 
+                        onKeyDown={(e) => e.key === 'Enter' && handleNextFix()}
+                        placeholder="Enter value..."
+                        autoFocus
+                        style={{ width: '100%', padding: '10px', marginBottom: '20px', borderRadius: '6px' }}
+                    />
+                    
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <button onClick={handleCancelFix} style={{ backgroundColor: '#555' }}>Cancel & Save</button>
+                        <button onClick={handleNextFix} style={{ backgroundColor: '#396cd8' }}>Next ➔</button>
+                    </div>
+                    
+                    <p style={{ textAlign: 'center', fontSize: '12px', color: '#888', marginTop: '15px' }}>
+                        Field {currentFixIndex + 1} of {missingFields.length}
+                    </p>
+                </div>
+            </div>
+        )}
+    </main>
         
     );
 }
