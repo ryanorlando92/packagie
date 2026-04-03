@@ -10,7 +10,6 @@ use tauri_plugin_dialog::DialogExt;
 use tauri::Listener;
 use tokio::sync::oneshot;
 use tokio::time::{timeout, sleep};
-use tokio::task::spawn;
 
 
 #[derive(Clone, Serialize)]
@@ -63,52 +62,46 @@ async fn auto_login(app: tauri::AppHandle, username: String, pass: String) -> Re
     let js_payload = format!(r#"
         (function() {{
             if (window.__packagie_injected) return;
-            window.__packagie_injected = true;
 
             const injectedUser = {};
             const injectedPass = {};
-            let attempts = 0;
 
-            const setNativeValue = (element, value) => {{
-                const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
-                valueSetter.call(element, value);
-                element.dispatchEvent(new Event('input', {{ bubbles: true }}));
-            }};
-
-            const attemptLogin = () => {{
-                attempts++;
-                
+            const intervalId = setInterval(() => {{
                 const userField = document.querySelector('input[data-testid="login-page_input_username"], input[placeholder="Username"], input[name="username"]');
                 const passField = document.querySelector('input[type="password"]');
+                const loginBtn = document.querySelector('button[type="submit"]');
 
-                if (userField && passField) {{
+                if (userField && passField && loginBtn) {{
+                    clearInterval(intervalId);
+                    window.__packagie_injected = true;
+
+                    const setNativeValue = (element, value) => {{
+                        const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+                        if (valueSetter) valueSetter.call(element, value);
+                        else element.value = value;
+                        
+                        element.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                        element.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                    }};
+
                     setNativeValue(userField, injectedUser);
                     setNativeValue(passField, injectedPass);
                     
-                    const loginBtn = document.querySelector('button[type="submit"]');
-                    if (loginBtn) {{
-                        setTimeout(() => loginBtn.click(), 500); 
-                    }}
-                }} else if (attempts < 3) {{
-                    setTimeout(attemptLogin, 400);
+                    setTimeout(() => loginBtn.click(), 400); 
                 }}
-            }};
-            attemptLogin();
+            }}, 1000);
+
+            setTimeout(() => clearInterval(intervalId), 45000);
         }})();
     "#, safe_user, safe_pass);
 
-    spawn(async move {
-        for _ in 0..3 {
-            sleep(Duration::from_millis(1800)).await;
-            let _ = dutchie_window.eval(&js_payload);
-        }
-    });
+    dutchie_window.eval(&js_payload).map_err(|e| e.to_string())?;
 
     Ok(())
 }
 
 #[tauri::command]
-async fn start_import(app: AppHandle, file_path: String) -> Result<(), String> {
+async fn start_import(app: AppHandle, file_path: String, is_bh: bool) -> Result<(), String> {
     let dutchie_window = app
         .get_webview_window("dutchie")
         .ok_or("Dutchie window not found. Please restart the app.")?;
@@ -158,6 +151,7 @@ async fn start_import(app: AppHandle, file_path: String) -> Result<(), String> {
         let lot = row.get(5).map(|d| d.to_string()).unwrap_or_default();
         let exp_date = format_excel_date(row.get(6).unwrap_or(&Data::Empty));
         let pack_date = format_excel_date(row.get(7).unwrap_or(&Data::Empty));
+        let package_id_val = if is_bh { &lot } else { &ndc };
 
         emit_progress(
             &app,
@@ -227,7 +221,7 @@ async fn start_import(app: AppHandle, file_path: String) -> Result<(), String> {
                 await delay(200);
 
                 await injectField("input[data-testid=receive-inventory-details_sr_quantity]", "{qty}");
-                await injectField("input-input_Package ID", "{ndc}");
+                await injectField("input-input_Package ID", "{package_id_val}");
                 await injectField("input-input_External package ID", "{metrc}");
                 await injectField("input-input_Lot name/batch ID", "{lot}");
                 await injectField("input-input_Expiration date", "{exp_date}", true);

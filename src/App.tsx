@@ -56,6 +56,7 @@ export default function App() {
     const [status, setStatus] = useState('Ready');
     const [progress, setProgress] = useState(0);
     const [isProcessing, setIsProcessing] = useState(false);
+    const [isBh, set_isBh] = useState(false);
 
     useEffect(() => {
         if (!hasAttemptedLogin.current) {
@@ -147,7 +148,7 @@ export default function App() {
         if (!filePath) return;
         setIsProcessing(true);
         try {
-        await invoke('start_import', { filePath });
+        await invoke('start_import', { filePath, isBh });
         } catch (error) {
         setStatus(`Error: ${error}`);
         setIsProcessing(false);
@@ -170,6 +171,16 @@ export default function App() {
             />
             <button onClick={handleSelectFile} disabled={isProcessing}>Browse</button>
         </div>
+        <div className="checkbox-wrapper">
+    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+        <input 
+            type="checkbox" 
+            checked={isBh} 
+            onChange={(e) => set_isBh(e.target.checked)} 
+        />
+        Beyond Hello
+    </label>
+</div>
         <button 
             onClick={handleStart} 
             disabled={isProcessing || !filePath} 
