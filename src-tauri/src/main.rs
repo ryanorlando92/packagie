@@ -4,10 +4,13 @@ use calamine::{open_workbook, Data, Reader, Xlsx};
 use chrono::{Duration as ChronoDuration, NaiveDate};
 use serde::Serialize;
 use std::time::Duration;
+use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_dialog::DialogExt;
+use tauri::Listener;
 use tokio::sync::oneshot;
-use tokio::time::sleep;
+use tokio::time::{timeout, sleep};
+use tokio::task::spawn;
 
 
 #[derive(Clone, Serialize)]
@@ -75,7 +78,6 @@ async fn auto_login(app: tauri::AppHandle, username: String, pass: String) -> Re
             const attemptLogin = () => {{
                 attempts++;
                 
-                // Added a few extra fallback selectors just in case Dutchie changes their DOM
                 const userField = document.querySelector('input[data-testid="login-page_input_username"], input[placeholder="Username"], input[name="username"]');
                 const passField = document.querySelector('input[type="password"]');
 
@@ -87,18 +89,17 @@ async fn auto_login(app: tauri::AppHandle, username: String, pass: String) -> Re
                     if (loginBtn) {{
                         setTimeout(() => loginBtn.click(), 500); 
                     }}
-                }} else if (attempts < 2) {{
-                    setTimeout(attemptLogin, 500);
+                }} else if (attempts < 3) {{
+                    setTimeout(attemptLogin, 400);
                 }}
             }};
             attemptLogin();
         }})();
     "#, safe_user, safe_pass);
 
-    tokio::spawn(async move {
-        // This guarantees we catch the page AFTER all 302 Redirects are finished.
+    spawn(async move {
         for _ in 0..3 {
-            tokio::time::sleep(Duration::from_millis(1800)).await;
+            sleep(Duration::from_millis(1800)).await;
             let _ = dutchie_window.eval(&js_payload);
         }
     });
@@ -129,10 +130,8 @@ async fn start_import(app: AppHandle, file_path: String) -> Result<(), String> {
 
         if !dutchie_window.is_focused().unwrap_or(true) {
             
-            // Create a channel to pause the async thread
             let (tx, rx) = oneshot::channel();
 
-            // Trigger the native OS popup overlay
             app.dialog()
                 .message("Automation paused because the window lost focus.\n\nPlease ensure the Receive Inventory window is active, then click OK to resume.")
                 .title("Packagie Paused")
@@ -142,13 +141,9 @@ async fn start_import(app: AppHandle, file_path: String) -> Result<(), String> {
                     let _ = tx.send(()); 
                 });
 
-            // This line physically suspends the Rust `for` loop here. 
-            // It uses 0% CPU while waiting for the user to click OK.
             let _ = rx.await;
 
-            // Once OK is clicked, give the browser 500ms to wake up its 
-            // rendering engine before we shoot the next JavaScript payload at it.
-            tokio::time::sleep(Duration::from_millis(500)).await;
+            sleep(Duration::from_millis(500)).await;
         }
 
         let current_row = i + 1;
@@ -189,35 +184,13 @@ async fn start_import(app: AppHandle, file_path: String) -> Result<(), String> {
                     }}
 
                     el.focus(); 
-                    // el.click(); 
                     await delay(50);
+
                     const ns = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
                     ns.call(el, val);
                     el.dispatchEvent(new Event("input", {{ bubbles: true }}));
                     el.dispatchEvent(new Event("change", {{ bubbles: true }}));
                     el.dispatchEvent(new KeyboardEvent("keydown", {{ key: "Enter", keyCode: 13, bubbles: true }}));
-                    
-                    /* Steal focus away from the date picker so it saves
-                    if (isDate) {{
-                        await delay(100);
-                        
-                        // 1. Fire Escape globally, not just on the input, because MUI traps focus
-                        document.activeElement.dispatchEvent(new KeyboardEvent("keydown", {{ key: "Escape", code: "Escape", keyCode: 27, bubbles: true }}));
-                        document.body.dispatchEvent(new KeyboardEvent("keydown", {{ key: "Escape", code: "Escape", keyCode: 27, bubbles: true }}));
-                        
-                        // 2. Click outside the popup! (The body, or the MUI backdrop)
-                        const backdrop = document.querySelector('.MuiBackdrop-root');
-                        if (backdrop) {{
-                            backdrop.dispatchEvent(new MouseEvent("mousedown", {{ bubbles: true }}));
-                            backdrop.dispatchEvent(new MouseEvent("mouseup", {{ bubbles: true }}));
-                            backdrop.click();
-                        }} else {{
-                            // Fallback if backdrop isn't found: click the absolute top-left of the page
-                            const fakeClick = new MouseEvent('mousedown', {{ bubbles: true, clientX: 0, clientY: 0 }});
-                            document.body.dispatchEvent(fakeClick);
-                            document.body.dispatchEvent(new MouseEvent('mouseup', {{ bubbles: true, clientX: 0, clientY: 0 }}));
-                        }}
-                    }} */
 
                     el.blur();
                     await delay(150);
@@ -240,13 +213,10 @@ async fn start_import(app: AppHandle, file_path: String) -> Result<(), String> {
                         ns.call(search, "{ndc}");
                         search.dispatchEvent(new Event("input", {{bubbles: true}}));
                         
-                        // Wait for Dutchie API
                         await delay(200); 
                         
-                        // Find the dropdown option
                         const opt = document.querySelector("li[data-option-index='0']");
                         if (opt) {{
-                            // Force MUI's required mousedown event
                             opt.dispatchEvent(new MouseEvent('mousedown', {{ bubbles: true, cancelable: true }}));
                             await delay(50);
                             opt.dispatchEvent(new MouseEvent('mouseup', {{ bubbles: true, cancelable: true }}));
@@ -266,38 +236,32 @@ async fn start_import(app: AppHandle, file_path: String) -> Result<(), String> {
 
                 await delay(200);
 
-                // Save
                 const saveBtn = document.querySelector("button[data-testid=receive-inventory-details_button_save]");
                 if (saveBtn && !saveBtn.disabled) {{
                     saveBtn.click();
+                    await delay(100);
+                    window.__TAURI__.event.emit("row_complete");
                 }}
             }})();
         "#
         );
 
-        dutchie_window
-            .eval(&js_payload)
-            .map_err(|e| e.to_string())?;
-        sleep(Duration::from_millis(5000)).await;
+        let (tx, rx) = oneshot::channel();
+        let tx_mutex = Arc::new(Mutex::new(Some(tx)));
 
-        if current_row > 10 {
-            sleep(Duration::from_millis(500)).await;
-        }
-        if current_row > 20 {
-            sleep(Duration::from_millis(500)).await;
-        }
-        if current_row > 27 {
-            sleep(Duration::from_millis(500)).await;
-        }
-        if current_row > 34 {
-            sleep(Duration::from_millis(500)).await;
-        }
-        if current_row > 40 {
-            sleep(Duration::from_millis(500)).await;
-        }
-        if current_row > 45 {
-            sleep(Duration::from_millis(500)).await;
-        }
+        let event_id = app.listen_any("row_complete", move |_| {
+            if let Some(sender) = tx_mutex.lock().unwrap().take() {
+                let _ = sender.send(());
+            }
+        });
+
+        dutchie_window.eval(&js_payload).map_err(|e| e.to_string())?;
+
+        let _ = timeout(Duration::from_secs(10), rx).await;
+
+        app.unlisten(event_id);
+
+        sleep(Duration::from_millis(100)).await;
     }
 
     emit_progress(&app, total_rows, total_rows, "Import Complete!");
