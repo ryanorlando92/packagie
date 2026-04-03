@@ -8,14 +8,15 @@ Packagie mimics human interaction to safely and accurately inject NDC, quantity,
 
 ## How it Works
 
-* **Credential Vault:** Save your username & password once, and packagie will log in for you every time. (not yet supported in Windows)
 * **Excel Parsing:** Reads an `.xlsx` inventory prep file and parses the data.
 * **Automated Data Entry:** Uses a hybrid approach of JavaScript DOM manipulation and synthetic event dispatching to trick React/MUI.
 * **Pause in Background** Packagie will pause if you navigate away from the window.
-* **Full Order Input:** Currently processes one row per 7 seconds, turning an hours long task into a 5 minute coffee break.
+* **Full Order Input:** Processes one row per 5 seconds, turning an hours long task into a 5 minute coffee break.
+* **Finish Prep Sheet** Fill empty fields on prep sheet before importing.
 
 ## Features
 
+* **Credential Vault:** Save your username & password once, and packagie will log in for you every time. (not yet supported in Windows)
 * **Cross-Platform:** Built on Tauri v2, ensuring lightweight, native execution on Windows, macOS, and Linux.
 * **Auto-Updater:** Built-in updater  pulls the latest signed binaries directly from GitHub Releases.
 
@@ -37,7 +38,5 @@ Thats it! Yes it's that easy.
 I am actively working to make Packagie more robust and feature-rich. The following updates are planned:
 
 [ ] In-App Documentation: A "Readme" button directly in the UI to easily access instructions and troubleshooting steps.
-
-[ ] Finish prep sheet function, giving the user the ability to fill in blank cells of your prep sheet either by manual input or barcode scan
 
 [ ] add url target to settings
