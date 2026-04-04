@@ -6,6 +6,7 @@ import { check } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { confirm, message } from '@tauri-apps/plugin-dialog';
 import { LazyStore } from '@tauri-apps/plugin-store';
+import './App.css';
 
 const store = new LazyStore('settings.json');
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -79,6 +80,7 @@ export default function App() {
 
     useEffect(() => {
         if (!hasAttemptedLogin.current) {
+            hasAttemptedLogin.current = true;
             triggerAutoLogin();
         }
     }, []);
@@ -235,127 +237,195 @@ const saveAndCloseFixer = async (updatesToSave: any) => {
     }
 };
 
-    return (
-        <main className="container">            
-        <div style={{ fontFamily: 'Verdana, sans-serif' }}>
-        <h2
-            style={{ margin: '0px' }}
-        >Dutchie Package Importer</h2>
-        <div style={{ display: 'flex', gap: '10px', margin: '5px' }}>
-            <input 
-            type="text" 
-            value={filePath} 
-            readOnly 
-            placeholder="Select Excel File (.xlsx)" 
-            style={{ flexGrow: 1, padding: '5px' }} 
-            />
-            <button onClick={handleSelectFile} disabled={isProcessing}>Browse</button>
-        </div>
-        <div className="checkbox-wrapper">
-            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', margin: '10px' }}>
-                <input 
-                    type="checkbox" 
-                    checked={isBh} 
-                    onChange={(e) => set_isBh(e.target.checked)} 
-                />
-                Beyond Hello
-            </label>
-        </div>
-    <div style={{ display: 'flex', alignContent: 'center', justifyContent: 'center', flexDirection: 'row'}}>
-        <button 
-            onClick={handleStart} 
-            disabled={isProcessing || !filePath} 
-            style={{ padding: '10px 20px', fontWeight: 'bold', width: '30%', margin: '10px' }}
-        >
-            {isProcessing ? 'IMPORTING...' : 'START IMPORT'}
-        </button>
+return (
+        <main className="container" style={{ 
+            minHeight: '100vh', 
+            backgroundColor: '#121212', 
+            color: '#e0e0e0',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+        }}>
 
-        <button 
-            onClick={startFieldFixer}
-            style={{ padding: '10px 20px', fontWeight: 'bold', width: '30%', margin: '10px' }}
-        >
-            Fill Empty Fields
-        </button>
-    </div> 
-    <div style={{ display: 'flex', alignContent: 'center', justifyContent: 'center' }}>
-        <button 
-            style={{ padding: '10px 20px', fontWeight: 'bold', width: '30%', margin: '10px' }}
-            onClick={() => showSettings ? setShowSettings(false) : openSettings()}
-            >
-                {showSettings ? '❌ Close Settings' : '⚙️ Settings'}
-        </button>
-     </div>  
-            {showSettings && (
-                <div className="settings-panel">
-                    <h3
-                    style={{ margin: '5px' }}
-                    >Dutchie Credentials</h3>
+            <div style={{
+                backgroundColor: '#1e1e1e', 
+                padding: '40px', 
+                borderRadius: '12px', 
+                width: '100%', 
+                maxWidth: '600px', 
+                boxShadow: '0 10px 40px rgba(0,0,0,0.5)', 
+                border: '1px solid #333'
+            }}>
+                <div style={{ textAlign: 'center', marginBottom: '30px' }}>
+                    <h2 style={{ margin: '0 0 8px 0', color: '#fff', fontSize: '24px', fontWeight: '700' }}>
+                        Packagie
+                    </h2>
+                    <p style={{ margin: 0, color: '#888', fontSize: '14px' }}>Automated Dutchie inventory receiving</p>
+                </div>
+
+                {/* FILE SELECTION ROW */}
+                <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
                     <input 
                         type="text" 
-                        placeholder="Username" 
-                        value={username} 
-                        onChange={(e) => setUsername(e.target.value)}
-                        style={{ padding: '5px 10px', width: '70%', margin: '10px' }} 
+                        value={filePath} 
+                        readOnly 
+                        className="pro-input"
+                        placeholder="Select Excel File (.xlsx)" 
+                        style={{ flexGrow: 1, padding: '12px' }} 
                     />
-                    <input 
-                        type="password" 
-                        placeholder="Password" 
-                        value={password} 
-                        onChange={(e) => setPassword(e.target.value)} 
-                        style={{ padding: '5px 10px', width: '80%', margin: '10px' }} 
-                    />
-                    <button onClick={saveSettings}>
-                        Save Credentials
+                    <button 
+                        className="pro-btn btn-secondary"
+                        onClick={handleSelectFile} 
+                        disabled={isProcessing}
+                        style={{ padding: '0 20px' }}
+                    >
+                        Browse
                     </button>
                 </div>
+
+                {/* OPTIONS ROW */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', padding: '0 5px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px', color: '#bbb' }}>
+                        <input 
+                            type="checkbox" 
+                            className="pro-checkbox"
+                            checked={isBh} 
+                            onChange={(e) => set_isBh(e.target.checked)} 
+                        />
+                        Beyond Hello Formatting
+                    </label>
+
+                    <button 
+                        className="pro-btn btn-outline"
+                        style={{ padding: '6px 12px', fontSize: '13px' }}
+                        onClick={() => showSettings ? setShowSettings(false) : openSettings()}
+                    >
+                        {showSettings ? 'Hide Settings' : '⚙️ Settings'}
+                    </button>
+                </div>
+
+                {/* SETTINGS PANEL (CONDITIONAL) */}
+                {showSettings && (
+                    <div style={{ 
+                        backgroundColor: '#151515', border: '1px solid #2a2a2a', 
+                        padding: '20px', borderRadius: '8px', marginBottom: '25px' 
+                    }}>
+                        <h3 style={{ margin: '0 0 15px 0', fontSize: '14px', color: '#aaa', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                            Dutchie Authentication
+                        </h3>
+                        <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
+                            <input 
+                                type="text" 
+                                className="pro-input"
+                                placeholder="Username" 
+                                value={username} 
+                                onChange={(e) => setUsername(e.target.value)}
+                                style={{ flex: 1, padding: '10px' }} 
+                            />
+                            <input 
+                                type="password" 
+                                className="pro-input"
+                                placeholder="Password" 
+                                value={password} 
+                                onChange={(e) => setPassword(e.target.value)} 
+                                style={{ flex: 1, padding: '10px' }} 
+                            />
+                        </div>
+                        <button className="pro-btn btn-secondary" onClick={saveSettings} style={{ width: '100%', padding: '10px' }}>
+                            Securely Save Credentials
+                        </button>
+                    </div>
                 )}
-        <div style={{ marginTop: '20px' }}>
-            <p style={{ textAlign: 'center' }}>{status}</p>
-            <progress value={progress} max="100" style={{ width: '100%', height: '20px' }} />
-        </div>
-        </div>
 
-        {isFixerOpen && (
-            <div style={{
-                position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
-                backgroundColor: 'rgba(0,0,0,0.7)', display: 'flex', justifyContent: 'center',
-                alignItems: 'center', zIndex: 9999
-            }}>
-                <div style={{
-                    backgroundColor: '#1e1e1e', padding: '30px', borderRadius: '12px', color: '#ffffff',
-                    width: '400px', boxShadow: '0 10px 30px rgba(0,0,0,0.5)', border: '1px solid #333'
+                {/* MAIN ACTIONS */}
+                <div style={{ display: 'flex', gap: '15px', marginBottom: '25px' }}>
+                    <button 
+                        className="pro-btn btn-primary"
+                        onClick={handleStart} 
+                        disabled={isProcessing || !filePath} 
+                        style={{ flex: 2, padding: '14px', fontSize: '15px' }}
+                    >
+                        {isProcessing ? 'IMPORTING...' : 'START IMPORT'}
+                    </button>
+
+                    <button 
+                        className="pro-btn btn-secondary"
+                        onClick={startFieldFixer}
+                        style={{ flex: 1, padding: '14px', fontSize: '14px' }}
+                    >
+                        Fix Missing Data
+                    </button>
+                </div> 
+
+                {/* PROGRESS BAR */}
+                <div style={{ 
+                    backgroundColor: '#151515', 
+                    padding: '15px', 
+                    borderRadius: '8px', 
+                    border: '1px solid #2a2a2a' 
                 }}>
-                    <h2 style={{ marginTop: 0 }}>Missing Data Wizard</h2>
-                    
-                    <div style={{ margin: '20px 0', padding: '15px', backgroundColor: '#2a2a2a', borderRadius: '8px' }}>
-                        <p style={{ margin: '0 0 10px 0' }}><strong>Product:</strong> <br/> {missingFields[currentFixIndex]?.row_name}</p>
-                        <p style={{ margin: 0 }}><strong>Needs:</strong> <br/> <span style={{ color: '#ff6b6b', fontSize: '18px', fontWeight: 'bold' }}>{missingFields[currentFixIndex]?.field_name}</span></p>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                        <span style={{ fontSize: '13px', color: '#aaa' }}>Status</span>
+                        <span style={{ fontSize: '13px', color: '#396cd8', fontWeight: 'bold' }}>{status}</span>
                     </div>
-
-                    <input 
-                        type="text" 
-                        value={fixInputValue} 
-                        onChange={(e) => setFixInputValue(e.target.value)} 
-                        onKeyDown={(e) => e.key === 'Enter' && handleNextFix()}
-                        placeholder="Enter value..."
-                        autoFocus
-                        style={{ width: '100%', padding: '10px', marginBottom: '20px', borderRadius: '6px' }}
-                    />
-                    
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <button onClick={handleCancelFix} style={{ backgroundColor: '#555' }}>Cancel & Save</button>
-                        <button onClick={handleNextFix} style={{ backgroundColor: '#396cd8' }}>Next ➔</button>
-                    </div>
-                    
-                    <p style={{ textAlign: 'center', fontSize: '12px', color: '#888', marginTop: '15px' }}>
-                        Field {currentFixIndex + 1} of {missingFields.length}
-                    </p>
+                    <progress className="pro-progress" value={progress} max="100" />
                 </div>
             </div>
-        )}
-    </main>
-        
+
+            {/* FIXER WIZARD POPUP */}
+            {isFixerOpen && (
+                <div style={{
+                    position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+                    backgroundColor: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)', 
+                    display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999
+                }}>
+                    <div style={{
+                        backgroundColor: '#1e1e1e', padding: '30px', borderRadius: '12px', color: '#ffffff',
+                        width: '400px', boxShadow: '0 20px 50px rgba(0,0,0,0.5)', border: '1px solid #333'
+                    }}>
+                        <h2 style={{ marginTop: 0, fontSize: '20px' }}>Missing Data Wizard</h2>
+                        
+                        <div style={{ margin: '20px 0', padding: '15px', backgroundColor: '#2a2a2a', borderRadius: '8px', borderLeft: '4px solid #ff6b6b' }}>
+                            <p style={{ margin: '0 0 10px 0', fontSize: '13px', color: '#aaa' }}>
+                                Product: <br/> 
+                                <strong style={{ color: '#fff', fontSize: '15px' }}>{missingFields[currentFixIndex]?.row_name}</strong>
+                            </p>
+                            <p style={{ margin: 0, fontSize: '13px', color: '#aaa' }}>
+                                Needs: <br/> 
+                                <span style={{ color: '#ff6b6b', fontSize: '18px', fontWeight: 'bold' }}>{missingFields[currentFixIndex]?.field_name}</span>
+                            </p>
+                        </div>
+
+                        <input 
+                            type="text" 
+                            className="pro-input"
+                            value={fixInputValue} 
+                            onChange={(e) => setFixInputValue(e.target.value)} 
+                            onKeyDown={(e) => e.key === 'Enter' && handleNextFix()}
+                            placeholder="Enter value..."
+                            autoFocus
+                            style={{ width: '100%', padding: '12px', marginBottom: '20px', boxSizing: 'border-box' }}
+                        />
+                        
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
+                            <button className="pro-btn btn-secondary" onClick={handleCancelFix} style={{ flex: 1, padding: '12px' }}>
+                                Cancel & Save
+                            </button>
+                            <button className="pro-btn btn-primary" onClick={handleNextFix} style={{ flex: 1, padding: '12px' }}>
+                                Next ➔
+                            </button>
+                        </div>
+                        
+                        <p style={{ textAlign: 'center', fontSize: '12px', color: '#666', marginTop: '20px', marginBottom: 0 }}>
+                            Field {currentFixIndex + 1} of {missingFields.length}
+                        </p>
+                    </div>
+                </div>
+            )}
+        </main>
     );
+
 }
 
 async function checkForAppUpdates() {

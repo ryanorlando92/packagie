@@ -10,6 +10,7 @@ use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_dialog::DialogExt;
 use tauri::Listener;
 use tokio::sync::oneshot;
+use tokio::sync::mpsc::channel;
 use tokio::time::{timeout, sleep};
 
 
@@ -45,7 +46,7 @@ fn scan_empty_fields(file_path: String) -> Result<Vec<MissingField>, String> {
 
     // Map the Calamine index (0-based) to the Umya index (1-based)
     let cols_to_check = vec![
-        (0, 1, "Package ID (Metrc)"),
+        (0, 1, "Ext Package ID (Metrc)"),
         (3, 4, "Quantity"),
         (4, 5, "NDC"),
         (5, 6, "Lot/Batch ID"),
@@ -57,14 +58,13 @@ fn scan_empty_fields(file_path: String) -> Result<Vec<MissingField>, String> {
         let row_name = row.get(2).map(|d| d.to_string()).unwrap_or_default(); // Column C
         let metrc = row.get(0).map(|d| d.to_string()).unwrap_or_default();
         
-        // End of data block detection
         if metrc.is_empty() && row_name.is_empty() { break; }
 
         for (cal_idx, umya_idx, col_name) in &cols_to_check {
             let val = row.get(*cal_idx).map(|d| d.to_string()).unwrap_or_default();
             if val.trim().is_empty() {
                 missing.push(MissingField {
-                    row_idx: (i + 1) as u32, // Calamine row 0 = Excel row 1
+                    row_idx: (i + 1) as u32,
                     col_idx: *umya_idx,
                     row_name: row_name.clone(),
                     field_name: col_name.to_string(),
@@ -132,43 +132,80 @@ async fn auto_login(app: tauri::AppHandle, username: String, pass: String) -> Re
     let safe_user = serde_json::to_string(&username).unwrap_or_default();
     let safe_pass = serde_json::to_string(&pass).unwrap_or_default();
 
+    let (tx, mut rx) = channel(1);
+
+    let event_id = app.listen_any("login_success", move |_| {
+        let _ = tx.try_send(());
+    });
+
     let js_payload = format!(r#"
         (function() {{
-            if (window.__packagie_injected) return;
+            if (window.__packagie_attempted || window.__packagie_injecting) return;
 
-            const injectedUser = {};
-            const injectedPass = {};
+            const userField = document.querySelector('input[data-testid="login-page_input_username"], input[placeholder="Username"], input[name="username"]');
+            const passField = document.querySelector('input[type="password"]');
+            const loginBtn = document.querySelector('button[type="submit"]');
 
-            const intervalId = setInterval(() => {{
-                const userField = document.querySelector('input[data-testid="login-page_input_username"], input[placeholder="Username"], input[name="username"]');
-                const passField = document.querySelector('input[type="password"]');
-                const loginBtn = document.querySelector('button[type="submit"]');
+            if (userField && passField && loginBtn) {{
+                // Lock the injection process so the next Rust tick ignores this DOM
+                window.__packagie_injecting = true; 
 
-                if (userField && passField && loginBtn) {{
-                    clearInterval(intervalId);
-                    window.__packagie_injected = true;
+                const setNativeValue = (element, value) => {{
+                    const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+                    if (valueSetter) valueSetter.call(element, value);
+                    else element.value = value;
+                    element.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                    element.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                }};
 
-                    const setNativeValue = (element, value) => {{
-                        const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
-                        if (valueSetter) valueSetter.call(element, value);
-                        else element.value = value;
-                        
-                        element.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                        element.dispatchEvent(new Event('change', {{ bubbles: true }}));
-                    }};
-
-                    setNativeValue(userField, injectedUser);
-                    setNativeValue(passField, injectedPass);
+                setNativeValue(userField, {});
+                setNativeValue(passField, {});
+                
+                // Give React 400ms to process the input events and enable the submit button
+                setTimeout(() => {{
+                    // Re-query the button to get its fresh state after the React render
+                    const currentBtn = document.querySelector('button[type="submit"]');
                     
-                    setTimeout(() => loginBtn.click(), 400); 
-                }}
-            }}, 1000);
-
-            setTimeout(() => clearInterval(intervalId), 45000);
+                    // Guard: Ensure it exists and is NOT disabled
+                    // (We check both the native .disabled property and MUI's aria-disabled just in case)
+                    if (currentBtn && !currentBtn.disabled && currentBtn.getAttribute('aria-disabled') !== 'true') {{
+                        
+                        window.__packagie_attempted = true; // Permanent lock
+                        currentBtn.click();
+                        
+                        // We successfully delivered the payload and clicked. Kill the Rust loop!
+                        if (window.__TAURI__) window.__TAURI__.event.emit("login_success");
+                        
+                    }} else {{
+                        // The button was still disabled. Unlock so the next Rust loop tick can try again.
+                        window.__packagie_injecting = false;
+                    }}
+                }}, 400); 
+            }}
         }})();
     "#, safe_user, safe_pass);
 
-    dutchie_window.eval(&js_payload).map_err(|e| e.to_string())?;
+    tokio::spawn(async move {
+        for _ in 0..10 {
+            
+            let _ = dutchie_window.eval(&js_payload);
+
+            // Wait for 1 second OR the success signal, whichever finishes first.
+            let sleep = sleep(Duration::from_millis(1000));
+            
+            tokio::select! {
+                _ = rx.recv() => {
+                    // Success! Kill the loop
+                    break;
+                }
+                _ = sleep => {
+                    // 1 second passed with no signal. Loop restarts and injects again.
+                }
+            }
+        }
+
+        app.unlisten(event_id);
+    });
 
     Ok(())
 }
@@ -363,6 +400,7 @@ fn main() {
             )
             .title("Packagie - Receive Inventory")
             .inner_size(1100.0, 850.0)
+            .maximized(true)
             .build()?;
             Ok(())
         })
